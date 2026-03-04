@@ -9,10 +9,9 @@ const TYPE_ICONS = {
   comment: { icon: MessageCircle, color: 'text-blue-400', bg: 'bg-blue-500/10' },
   follow: { icon: UserPlus, color: 'text-green-400', bg: 'bg-green-500/10' },
 }
-
 const TYPE_TEXT = {
-  like: 'GIF\'ini beğendi',
-  comment: 'GIF\'ine yorum yaptı',
+  like: "GIF'ini beğendi",
+  comment: "GIF'ine yorum yaptı",
   follow: 'seni takip etmeye başladı',
 }
 
@@ -29,14 +28,12 @@ export default function Notifications() {
   async function loadNotifications() {
     const { data } = await supabase
       .from('notifications')
-      .select('*, from_profile:profiles!notifications_from_user_id_fkey(username, avatar_url), post:posts(gif_url)')
+      .select('*, from_profile:profiles!fk_notif_from_profiles(username, display_name, avatar_url), post:posts(gif_url)')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(50)
     setNotifications(data || [])
     setLoading(false)
-
-    // Tümünü okundu işaretle
     await supabase.from('notifications').update({ read: true }).eq('user_id', user.id).eq('read', false)
   }
 
@@ -53,18 +50,10 @@ export default function Notifications() {
   return (
     <div className="max-w-xl mx-auto px-4 py-6">
       <h1 className="text-xl font-bold mb-6">Bildirimler</h1>
-
-      {loading && (
-        <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-brand-400" /></div>
-      )}
-
+      {loading && <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-brand-400" /></div>}
       {!loading && notifications.length === 0 && (
-        <div className="text-center py-16 text-gray-500">
-          <p className="text-4xl mb-3">🔔</p>
-          <p>Henüz bildirim yok</p>
-        </div>
+        <div className="text-center py-16 text-gray-500"><p className="text-4xl mb-3">🔔</p><p>Henüz bildirim yok</p></div>
       )}
-
       <div className="space-y-2">
         {notifications.map(notif => {
           const { icon: Icon, color, bg } = TYPE_ICONS[notif.type] || TYPE_ICONS.like
@@ -74,17 +63,17 @@ export default function Notifications() {
               <div className={`w-9 h-9 rounded-full ${bg} flex items-center justify-center flex-shrink-0`}>
                 <Icon className={`w-5 h-5 ${color}`} />
               </div>
-
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <Link to={`/profile/${fromUser?.username}`} className="w-9 h-9 rounded-full bg-brand-800 flex-shrink-0 overflow-hidden flex items-center justify-center text-xs font-bold text-brand-200">
                   {fromUser?.avatar_url ? <img src={fromUser.avatar_url} alt="" className="w-full h-full object-cover" /> : fromUser?.username?.[0]?.toUpperCase()}
                 </Link>
                 <p className="text-sm flex-1 min-w-0 truncate">
-                  <Link to={`/profile/${fromUser?.username}`} className="font-semibold text-brand-400 hover:text-brand-300">@{fromUser?.username}</Link>
+                  <Link to={`/profile/${fromUser?.username}`} className="font-semibold text-brand-400 hover:text-brand-300">
+                    {fromUser?.display_name || fromUser?.username}
+                  </Link>
                   {' '}{TYPE_TEXT[notif.type]}
                 </p>
               </div>
-
               <div className="flex items-center gap-3 flex-shrink-0">
                 {notif.post?.gif_url && (
                   <div className="w-12 h-12 rounded-lg overflow-hidden bg-black/20">

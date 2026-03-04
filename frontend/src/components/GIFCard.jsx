@@ -1,15 +1,16 @@
 import { useState } from 'react'
-import { Heart, MessageCircle, Share2, MoreHorizontal, Bookmark } from 'lucide-react'
+import { Heart, MessageCircle, Share2, Repeat2, MoreHorizontal } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
 import CommentModal from './CommentModal'
 
-export default function GIFCard({ post, onLikeToggle }) {
+export default function GIFCard({ post, onLikeToggle, showRepostBadge }) {
   const { user } = useAuth()
   const [liked, setLiked] = useState(post.user_liked || false)
   const [likeCount, setLikeCount] = useState(post.likes_count || 0)
+  const [reposted, setReposted] = useState(post.user_reposted || false)
   const [showComments, setShowComments] = useState(false)
   const [imgLoaded, setImgLoaded] = useState(false)
 
@@ -18,23 +19,28 @@ export default function GIFCard({ post, onLikeToggle }) {
     const newLiked = !liked
     setLiked(newLiked)
     setLikeCount(n => newLiked ? n + 1 : n - 1)
-
     if (newLiked) {
       await supabase.from('likes').insert({ user_id: user.id, post_id: post.id })
-      // Bildirim gönder (kendi postuna değilse)
       if (post.user_id !== user.id) {
-        await supabase.from('notifications').insert({
-          user_id: post.user_id,
-          type: 'like',
-          from_user_id: user.id,
-          post_id: post.id
-        })
+        await supabase.from('notifications').insert({ user_id: post.user_id, type: 'like', from_user_id: user.id, post_id: post.id })
       }
     } else {
-      await supabase.from('likes').delete()
-        .eq('user_id', user.id).eq('post_id', post.id)
+      await supabase.from('likes').delete().eq('user_id', user.id).eq('post_id', post.id)
     }
     onLikeToggle?.()
+  }
+
+  async function toggleRepost() {
+    if (!user) { toast.error('Repost için giriş yap'); return }
+    const newReposted = !reposted
+    setReposted(newReposted)
+    if (newReposted) {
+      await supabase.from('reposts').insert({ user_id: user.id, post_id: post.id })
+      toast.success('Repost yapıldı!')
+    } else {
+      await supabase.from('reposts').delete().eq('user_id', user.id).eq('post_id', post.id)
+      toast('Repost kaldırıldı')
+    }
   }
 
   async function share() {
@@ -49,13 +55,17 @@ export default function GIFCard({ post, onLikeToggle }) {
 
   const avatarUrl = post.profiles?.avatar_url
   const username = post.profiles?.username || 'anonim'
-  const timeAgo = formatTime(post.created_at)
+  const displayName = post.profiles?.display_name || username
 
   return (
     <>
       <article className="card animate-fade-in overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 pt-4 pb-3">
+        {showRepostBadge && (
+          <div className="flex items-center gap-1.5 px-4 pt-3 text-xs text-gray-500">
+            <Repeat2 className="w-3.5 h-3.5" /> Repost edildi
+          </div>
+        )}
+        <div className="flex items-center justify-between px-4 pt-3 pb-3">
           <Link to={`/profile/${username}`} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
             <div className="w-9 h-9 rounded-full overflow-hidden bg-brand-800 flex-shrink-0">
               {avatarUrl ? (
@@ -67,8 +77,8 @@ export default function GIFCard({ post, onLikeToggle }) {
               )}
             </div>
             <div>
-              <p className="font-semibold text-sm text-white">@{username}</p>
-              <p className="text-xs text-gray-500">{timeAgo}</p>
+              <p className="font-semibold text-sm text-white">{displayName}</p>
+              <p className="text-xs text-gray-500">@{username} · {formatTime(post.created_at)}</p>
             </div>
           </Link>
           <button className="text-gray-500 hover:text-white p-1 rounded-lg hover:bg-white/5 transition-all">
@@ -76,7 +86,6 @@ export default function GIFCard({ post, onLikeToggle }) {
           </button>
         </div>
 
-        {/* Caption */}
         {post.caption && (
           <p className="px-4 pb-3 text-sm text-gray-300">
             {post.caption}
@@ -86,7 +95,6 @@ export default function GIFCard({ post, onLikeToggle }) {
           </p>
         )}
 
-        {/* GIF */}
         <div className="relative bg-black/30 min-h-[200px] flex items-center justify-center">
           {!imgLoaded && (
             <div className="absolute inset-0 flex items-center justify-center">
@@ -102,38 +110,32 @@ export default function GIFCard({ post, onLikeToggle }) {
           />
         </div>
 
-        {/* Actions */}
         <div className="flex items-center gap-1 px-3 py-3">
-          <button
-            onClick={toggleLike}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
-              liked ? 'text-red-400 bg-red-500/10' : 'text-gray-400 hover:text-red-400 hover:bg-red-500/10'
-            }`}
-          >
+          <button onClick={toggleLike}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${liked ? 'text-red-400 bg-red-500/10' : 'text-gray-400 hover:text-red-400 hover:bg-red-500/10'}`}>
             <Heart className={`w-5 h-5 ${liked ? 'fill-current' : ''}`} />
             <span>{likeCount}</span>
           </button>
 
-          <button
-            onClick={() => setShowComments(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-gray-400 hover:text-blue-400 hover:bg-blue-500/10 transition-all"
-          >
+          <button onClick={() => setShowComments(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-gray-400 hover:text-blue-400 hover:bg-blue-500/10 transition-all">
             <MessageCircle className="w-5 h-5" />
             <span>{post.comments_count || 0}</span>
           </button>
 
-          <button
-            onClick={share}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-gray-400 hover:text-green-400 hover:bg-green-500/10 transition-all ml-auto"
-          >
+          <button onClick={toggleRepost}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all ${reposted ? 'text-green-400 bg-green-500/10' : 'text-gray-400 hover:text-green-400 hover:bg-green-500/10'}`}>
+            <Repeat2 className="w-5 h-5" />
+          </button>
+
+          <button onClick={share}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-gray-400 hover:text-purple-400 hover:bg-purple-500/10 transition-all ml-auto">
             <Share2 className="w-5 h-5" />
           </button>
         </div>
       </article>
 
-      {showComments && (
-        <CommentModal post={post} onClose={() => setShowComments(false)} />
-      )}
+      {showComments && <CommentModal post={post} onClose={() => setShowComments(false)} />}
     </>
   )
 }
