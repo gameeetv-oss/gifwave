@@ -16,7 +16,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-GIPHY_API_KEY = os.getenv("GIPHY_API_KEY", "")
+# Ücretsiz public beta key fallback — üretim için kendi key'ini ekle
+GIPHY_API_KEY = os.getenv("GIPHY_API_KEY", "dc6zaTOxFJmzC")
 GIPHY_BASE = "https://api.giphy.com/v1/gifs"
 
 

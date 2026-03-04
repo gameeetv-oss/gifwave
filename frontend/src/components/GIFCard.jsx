@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Heart, MessageCircle, Share2, Repeat2, MoreHorizontal } from 'lucide-react'
+import { Heart, MessageCircle, Share2, Repeat2, MoreHorizontal, Pencil, Check, X, Loader2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
@@ -13,6 +13,15 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge }) {
   const [reposted, setReposted] = useState(post.user_reposted || false)
   const [showComments, setShowComments] = useState(false)
   const [imgLoaded, setImgLoaded] = useState(false)
+  const [showMenu, setShowMenu] = useState(false)
+  const [editMode, setEditMode] = useState(false)
+  const [editCaption, setEditCaption] = useState(post.caption || '')
+  const [editOverlay, setEditOverlay] = useState(post.text_overlay || '')
+  const [showOverlay, setShowOverlay] = useState(post.show_overlay || false)
+  const [saving, setSaving] = useState(false)
+  const [currentPost, setCurrentPost] = useState(post)
+
+  const isOwner = user?.id === post.user_id
 
   async function toggleLike() {
     if (!user) { toast.error('Beğenmek için giriş yap'); return }
@@ -20,9 +29,10 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge }) {
     setLiked(newLiked)
     setLikeCount(n => newLiked ? n + 1 : n - 1)
     if (newLiked) {
-      await supabase.from('likes').insert({ user_id: user.id, post_id: post.id })
+      const { error } = await supabase.from('likes').insert({ user_id: user.id, post_id: post.id })
+      if (error) { setLiked(!newLiked); setLikeCount(n => n - 1); return }
       if (post.user_id !== user.id) {
-        await supabase.from('notifications').insert({ user_id: post.user_id, type: 'like', from_user_id: user.id, post_id: post.id })
+        supabase.from('notifications').insert({ user_id: post.user_id, type: 'like', from_user_id: user.id, post_id: post.id })
       }
     } else {
       await supabase.from('likes').delete().eq('user_id', user.id).eq('post_id', post.id)
@@ -35,7 +45,8 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge }) {
     const newReposted = !reposted
     setReposted(newReposted)
     if (newReposted) {
-      await supabase.from('reposts').insert({ user_id: user.id, post_id: post.id })
+      const { error } = await supabase.from('reposts').insert({ user_id: user.id, post_id: post.id })
+      if (error) { setReposted(false); return }
       toast.success('Repost yapıldı!')
     } else {
       await supabase.from('reposts').delete().eq('user_id', user.id).eq('post_id', post.id)
@@ -43,14 +54,23 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge }) {
     }
   }
 
+  async function saveEdit() {
+    setSaving(true)
+    const { error } = await supabase.from('posts')
+      .update({ caption: editCaption, text_overlay: editOverlay, show_overlay: showOverlay })
+      .eq('id', post.id)
+    if (!error) {
+      setCurrentPost(p => ({ ...p, caption: editCaption, text_overlay: editOverlay, show_overlay: showOverlay }))
+      setEditMode(false)
+      toast.success('Gönderi güncellendi')
+    } else toast.error('Güncelleme hatası')
+    setSaving(false)
+  }
+
   async function share() {
     const url = `${window.location.origin}/post/${post.id}`
-    if (navigator.share) {
-      navigator.share({ title: post.caption || 'GifWave', url })
-    } else {
-      await navigator.clipboard.writeText(url)
-      toast.success('Link kopyalandı!')
-    }
+    if (navigator.share) navigator.share({ title: currentPost.caption || 'GifWave', url })
+    else { await navigator.clipboard.writeText(url); toast.success('Link kopyalandı!') }
   }
 
   const avatarUrl = post.profiles?.avatar_url
@@ -65,36 +85,80 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge }) {
             <Repeat2 className="w-3.5 h-3.5" /> Repost edildi
           </div>
         )}
+
+        {/* Header */}
         <div className="flex items-center justify-between px-4 pt-3 pb-3">
           <Link to={`/profile/${username}`} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
             <div className="w-9 h-9 rounded-full overflow-hidden bg-brand-800 flex-shrink-0">
-              {avatarUrl ? (
-                <img src={avatarUrl} alt={username} className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-brand-200 text-sm font-bold">
-                  {username[0]?.toUpperCase()}
-                </div>
-              )}
+              {avatarUrl
+                ? <img src={avatarUrl} alt={username} className="w-full h-full object-cover" />
+                : <div className="w-full h-full flex items-center justify-center text-brand-200 text-sm font-bold">{username[0]?.toUpperCase()}</div>
+              }
             </div>
             <div>
               <p className="font-semibold text-sm text-white">{displayName}</p>
               <p className="text-xs text-gray-500">@{username} · {formatTime(post.created_at)}</p>
             </div>
           </Link>
-          <button className="text-gray-500 hover:text-white p-1 rounded-lg hover:bg-white/5 transition-all">
-            <MoreHorizontal className="w-5 h-5" />
-          </button>
+
+          <div className="relative">
+            <button onClick={() => setShowMenu(m => !m)} className="text-gray-500 hover:text-white p-1 rounded-lg hover:bg-white/5 transition-all">
+              <MoreHorizontal className="w-5 h-5" />
+            </button>
+            {showMenu && (
+              <div className="absolute right-0 top-8 bg-[#1a1a2e] border border-[#3a3a5c] rounded-xl shadow-xl z-20 min-w-[140px] py-1" onClick={() => setShowMenu(false)}>
+                {isOwner && (
+                  <button onClick={() => setEditMode(true)}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/5">
+                    <Pencil className="w-4 h-4" /> Düzenle
+                  </button>
+                )}
+                <button onClick={share}
+                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/5">
+                  <Share2 className="w-4 h-4" /> Paylaş
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
-        {post.caption && (
-          <p className="px-4 pb-3 text-sm text-gray-300">
-            {post.caption}
-            {post.tags?.map(tag => (
-              <Link key={tag} to={`/explore?tag=${tag}`} className="text-brand-400 ml-1">#{tag}</Link>
-            ))}
-          </p>
+        {/* Düzenleme modu */}
+        {editMode ? (
+          <div className="px-4 pb-3 space-y-2">
+            <input className="input text-sm" placeholder="Açıklama..." value={editCaption}
+              onChange={e => setEditCaption(e.target.value)} />
+            <input className="input text-sm" placeholder="GIF üzerine yazı (meme tarzı, opsiyonel)..."
+              value={editOverlay} onChange={e => setEditOverlay(e.target.value)} />
+            {editOverlay && (
+              <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
+                <input type="checkbox" checked={showOverlay} onChange={e => setShowOverlay(e.target.checked)}
+                  className="rounded" />
+                GIF üzerinde göster
+              </label>
+            )}
+            <div className="flex gap-2">
+              <button onClick={saveEdit} disabled={saving}
+                className="btn-primary text-sm px-3 py-1.5 flex items-center gap-1">
+                {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                Kaydet
+              </button>
+              <button onClick={() => setEditMode(false)} className="btn-ghost text-sm px-3 py-1.5 flex items-center gap-1">
+                <X className="w-3 h-3" /> İptal
+              </button>
+            </div>
+          </div>
+        ) : (
+          currentPost.caption && (
+            <p className="px-4 pb-3 text-sm text-gray-300">
+              {currentPost.caption}
+              {currentPost.tags?.map(tag => (
+                <Link key={tag} to={`/explore?tag=${tag}`} className="text-brand-400 ml-1">#{tag}</Link>
+              ))}
+            </p>
+          )
         )}
 
+        {/* GIF */}
         <div className="relative bg-black/30 min-h-[200px] flex items-center justify-center">
           {!imgLoaded && (
             <div className="absolute inset-0 flex items-center justify-center">
@@ -102,14 +166,23 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge }) {
             </div>
           )}
           <img
-            src={post.gif_url}
-            alt={post.caption || 'GIF'}
+            src={currentPost.gif_url}
+            alt={currentPost.caption || 'GIF'}
             className={`w-full max-h-[500px] object-contain transition-opacity duration-300 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
             onLoad={() => setImgLoaded(true)}
             loading="lazy"
           />
+          {/* Yazı overlay */}
+          {currentPost.show_overlay && currentPost.text_overlay && (
+            <div className="absolute bottom-0 inset-x-0 bg-black/70 px-4 py-3 text-center">
+              <p className="text-white font-bold text-lg leading-tight" style={{ textShadow: '2px 2px 4px black' }}>
+                {currentPost.text_overlay}
+              </p>
+            </div>
+          )}
         </div>
 
+        {/* Actions */}
         <div className="flex items-center gap-1 px-3 py-3">
           <button onClick={toggleLike}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${liked ? 'text-red-400 bg-red-500/10' : 'text-gray-400 hover:text-red-400 hover:bg-red-500/10'}`}>
@@ -120,7 +193,7 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge }) {
           <button onClick={() => setShowComments(true)}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-gray-400 hover:text-blue-400 hover:bg-blue-500/10 transition-all">
             <MessageCircle className="w-5 h-5" />
-            <span>{post.comments_count || 0}</span>
+            <span>{currentPost.comments_count || 0}</span>
           </button>
 
           <button onClick={toggleRepost}
@@ -135,7 +208,7 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge }) {
         </div>
       </article>
 
-      {showComments && <CommentModal post={post} onClose={() => setShowComments(false)} />}
+      {showComments && <CommentModal post={currentPost} onClose={() => setShowComments(false)} />}
     </>
   )
 }

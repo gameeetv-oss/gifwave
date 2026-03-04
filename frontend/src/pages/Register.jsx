@@ -16,26 +16,32 @@ export default function Register() {
     if (username.length < 3) { toast.error('Kullanıcı adı en az 3 karakter'); return }
     if (password.length < 6) { toast.error('Şifre en az 6 karakter'); return }
 
-    // Kullanıcı adı müsait mi kontrol et
-    const { data: existing } = await supabase.from('profiles').select('id').eq('username', username).single()
-    if (existing) { toast.error('Bu kullanıcı adı alınmış'); return }
-
     setLoading(true)
-    const { data, error } = await supabase.auth.signUp({ email, password })
-    if (error) {
-      toast.error(error.message)
-      setLoading(false)
-      return
-    }
 
-    // Profil oluştur
+    // Kullanıcı adı müsait mi?
+    const { data: existing } = await supabase.from('profiles').select('id').eq('username', username).maybeSingle()
+    if (existing) { toast.error('Bu kullanıcı adı alınmış'); setLoading(false); return }
+
+    const { data, error } = await supabase.auth.signUp({ email, password })
+    if (error) { toast.error(error.message); setLoading(false); return }
+
     if (data.user) {
-      await supabase.from('profiles').insert({
-        id: data.user.id,
-        username,
-        followers_count: 0,
-        following_count: 0
-      })
+      // Profil oluştur — birden fazla deneme yap
+      let profileError = null
+      for (let i = 0; i < 3; i++) {
+        const { error: pErr } = await supabase.from('profiles').insert({
+          id: data.user.id,
+          username,
+          display_name: '',
+          bio: '',
+          followers_count: 0,
+          following_count: 0
+        })
+        profileError = pErr
+        if (!pErr) break
+        await new Promise(r => setTimeout(r, 500))
+      }
+      if (profileError) toast.error('Profil oluşturulamadı, tekrar dene')
     }
 
     toast.success('Hesap oluşturuldu! Giriş yap.')
@@ -63,11 +69,13 @@ export default function Register() {
             </div>
             <div>
               <label className="text-sm text-gray-400 mb-1.5 block">Email</label>
-              <input className="input" type="email" placeholder="email@örnek.com" value={email} onChange={e => setEmail(e.target.value)} required />
+              <input className="input" type="email" placeholder="email@örnek.com" value={email}
+                onChange={e => setEmail(e.target.value)} required />
             </div>
             <div>
               <label className="text-sm text-gray-400 mb-1.5 block">Şifre</label>
-              <input className="input" type="password" placeholder="min 6 karakter" value={password} onChange={e => setPassword(e.target.value)} required />
+              <input className="input" type="password" placeholder="min 6 karakter" value={password}
+                onChange={e => setPassword(e.target.value)} required />
             </div>
             <button type="submit" disabled={loading} className="btn-primary w-full py-3 mt-2">
               {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Kayıt Ol'}
