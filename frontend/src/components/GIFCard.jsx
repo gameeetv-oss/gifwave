@@ -1,15 +1,16 @@
 import { useState } from 'react'
-import { Heart, MessageCircle, Share2, Repeat2, MoreHorizontal, Pencil, Check, X, Loader2 } from 'lucide-react'
+import { Heart, MessageCircle, Share2, Repeat2, MoreHorizontal, Pencil, Check, X, Loader2, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
 import CommentModal from './CommentModal'
 
-export default function GIFCard({ post, onLikeToggle, showRepostBadge }) {
+export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete }) {
   const { user } = useAuth()
   const [liked, setLiked] = useState(post.user_liked || false)
   const [likeCount, setLikeCount] = useState(post.likes_count || 0)
+  const [commentCount, setCommentCount] = useState(post.comments_count || 0)
   const [reposted, setReposted] = useState(post.user_reposted || false)
   const [showComments, setShowComments] = useState(false)
   const [imgLoaded, setImgLoaded] = useState(false)
@@ -30,7 +31,7 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge }) {
     setLikeCount(n => newLiked ? n + 1 : n - 1)
     if (newLiked) {
       const { error } = await supabase.from('likes').insert({ user_id: user.id, post_id: post.id })
-      if (error) { setLiked(!newLiked); setLikeCount(n => n - 1); return }
+      if (error) { setLiked(false); setLikeCount(n => n - 1); return }
       if (post.user_id !== user.id) {
         supabase.from('notifications').insert({ user_id: post.user_id, type: 'like', from_user_id: user.id, post_id: post.id })
       }
@@ -68,9 +69,23 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge }) {
   }
 
   async function share() {
-    const url = `${window.location.origin}/post/${post.id}`
+    const url = window.location.origin
     if (navigator.share) navigator.share({ title: currentPost.caption || 'GifWave', url })
     else { await navigator.clipboard.writeText(url); toast.success('Link kopyalandı!') }
+  }
+
+  async function handleDelete() {
+    setShowMenu(false)
+    onDelete?.(post.id)
+  }
+
+  function handleCommentOpen() {
+    setShowComments(true)
+  }
+
+  function handleCommentClose(newCount) {
+    setShowComments(false)
+    if (typeof newCount === 'number') setCommentCount(newCount)
   }
 
   const avatarUrl = post.profiles?.avatar_url
@@ -79,7 +94,7 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge }) {
 
   return (
     <>
-      <article className="card animate-fade-in overflow-hidden">
+      <article className="card animate-fade-in overflow-hidden" onClick={() => showMenu && setShowMenu(false)}>
         {showRepostBadge && (
           <div className="flex items-center gap-1.5 px-4 pt-3 text-xs text-gray-500">
             <Repeat2 className="w-3.5 h-3.5" /> Repost edildi
@@ -102,18 +117,26 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge }) {
           </Link>
 
           <div className="relative">
-            <button onClick={() => setShowMenu(m => !m)} className="text-gray-500 hover:text-white p-1 rounded-lg hover:bg-white/5 transition-all">
+            <button onClick={e => { e.stopPropagation(); setShowMenu(m => !m) }}
+              className="text-gray-500 hover:text-white p-1 rounded-lg hover:bg-white/5 transition-all">
               <MoreHorizontal className="w-5 h-5" />
             </button>
             {showMenu && (
-              <div className="absolute right-0 top-8 bg-[#1a1a2e] border border-[#3a3a5c] rounded-xl shadow-xl z-20 min-w-[140px] py-1" onClick={() => setShowMenu(false)}>
+              <div className="absolute right-0 top-8 bg-[#1a1a2e] border border-[#3a3a5c] rounded-xl shadow-xl z-20 min-w-[140px] py-1"
+                onClick={e => e.stopPropagation()}>
                 {isOwner && (
-                  <button onClick={() => setEditMode(true)}
-                    className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/5">
-                    <Pencil className="w-4 h-4" /> Düzenle
-                  </button>
+                  <>
+                    <button onClick={() => { setEditMode(true); setShowMenu(false) }}
+                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/5">
+                      <Pencil className="w-4 h-4" /> Düzenle
+                    </button>
+                    <button onClick={handleDelete}
+                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-red-500/10">
+                      <Trash2 className="w-4 h-4" /> Sil
+                    </button>
+                  </>
                 )}
-                <button onClick={share}
+                <button onClick={() => { share(); setShowMenu(false) }}
                   className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/5">
                   <Share2 className="w-4 h-4" /> Paylaş
                 </button>
@@ -127,36 +150,32 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge }) {
           <div className="px-4 pb-3 space-y-2">
             <input className="input text-sm" placeholder="Açıklama..." value={editCaption}
               onChange={e => setEditCaption(e.target.value)} />
-            <input className="input text-sm" placeholder="GIF üzerine yazı (meme tarzı, opsiyonel)..."
+            <input className="input text-sm" placeholder="GIF üzerine yazı (meme tarzı)..."
               value={editOverlay} onChange={e => setEditOverlay(e.target.value)} />
             {editOverlay && (
               <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
-                <input type="checkbox" checked={showOverlay} onChange={e => setShowOverlay(e.target.checked)}
-                  className="rounded" />
+                <input type="checkbox" checked={showOverlay} onChange={e => setShowOverlay(e.target.checked)} />
                 GIF üzerinde göster
               </label>
             )}
             <div className="flex gap-2">
               <button onClick={saveEdit} disabled={saving}
                 className="btn-primary text-sm px-3 py-1.5 flex items-center gap-1">
-                {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-                Kaydet
+                {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Kaydet
               </button>
               <button onClick={() => setEditMode(false)} className="btn-ghost text-sm px-3 py-1.5 flex items-center gap-1">
                 <X className="w-3 h-3" /> İptal
               </button>
             </div>
           </div>
-        ) : (
-          currentPost.caption && (
-            <p className="px-4 pb-3 text-sm text-gray-300">
-              {currentPost.caption}
-              {currentPost.tags?.map(tag => (
-                <Link key={tag} to={`/explore?tag=${tag}`} className="text-brand-400 ml-1">#{tag}</Link>
-              ))}
-            </p>
-          )
-        )}
+        ) : currentPost.caption ? (
+          <p className="px-4 pb-3 text-sm text-gray-300">
+            {currentPost.caption}
+            {currentPost.tags?.map(tag => (
+              <Link key={tag} to={`/explore?tag=${tag}`} className="text-brand-400 ml-1">#{tag}</Link>
+            ))}
+          </p>
+        ) : null}
 
         {/* GIF */}
         <div className="relative bg-black/30 min-h-[200px] flex items-center justify-center">
@@ -172,7 +191,6 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge }) {
             onLoad={() => setImgLoaded(true)}
             loading="lazy"
           />
-          {/* Yazı overlay */}
           {currentPost.show_overlay && currentPost.text_overlay && (
             <div className="absolute bottom-0 inset-x-0 bg-black/70 px-4 py-3 text-center">
               <p className="text-white font-bold text-lg leading-tight" style={{ textShadow: '2px 2px 4px black' }}>
@@ -185,30 +203,36 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge }) {
         {/* Actions */}
         <div className="flex items-center gap-1 px-3 py-3">
           <button onClick={toggleLike}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${liked ? 'text-red-400 bg-red-500/10' : 'text-gray-400 hover:text-red-400 hover:bg-red-500/10'}`}>
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
+              liked ? 'text-red-400 bg-red-500/10' : 'text-gray-400 hover:text-red-400 hover:bg-red-500/10'
+            }`}>
             <Heart className={`w-5 h-5 ${liked ? 'fill-current' : ''}`} />
             <span>{likeCount}</span>
           </button>
 
-          <button onClick={() => setShowComments(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-gray-400 hover:text-blue-400 hover:bg-blue-500/10 transition-all">
-            <MessageCircle className="w-5 h-5" />
-            <span>{currentPost.comments_count || 0}</span>
+          <button onClick={handleCommentOpen}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+              commentCount > 0 ? 'text-blue-400 bg-blue-500/10' : 'text-gray-400 hover:text-blue-400 hover:bg-blue-500/10'
+            }`}>
+            <MessageCircle className={`w-5 h-5 ${commentCount > 0 ? 'fill-current opacity-30' : ''}`} />
+            <span>{commentCount}</span>
           </button>
 
           <button onClick={toggleRepost}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all ${reposted ? 'text-green-400 bg-green-500/10' : 'text-gray-400 hover:text-green-400 hover:bg-green-500/10'}`}>
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+              reposted ? 'text-green-400 bg-green-500/10' : 'text-gray-400 hover:text-green-400 hover:bg-green-500/10'
+            }`}>
             <Repeat2 className="w-5 h-5" />
-          </button>
-
-          <button onClick={share}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-gray-400 hover:text-purple-400 hover:bg-purple-500/10 transition-all ml-auto">
-            <Share2 className="w-5 h-5" />
           </button>
         </div>
       </article>
 
-      {showComments && <CommentModal post={currentPost} onClose={() => setShowComments(false)} />}
+      {showComments && (
+        <CommentModal
+          post={{ ...currentPost, comments_count: commentCount }}
+          onClose={handleCommentClose}
+        />
+      )}
     </>
   )
 }

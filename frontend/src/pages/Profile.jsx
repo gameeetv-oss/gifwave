@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
-import { Camera, Loader2, UserPlus, UserMinus, Heart, Repeat2, Grid3x3, Pencil, Trash2, X, Check } from 'lucide-react'
+import { Camera, Loader2, UserPlus, UserMinus, Heart, Repeat2, Grid3x3, Pencil, Trash2, Check, X } from 'lucide-react'
 import GIFCard from '../components/GIFCard'
+import FollowModal from '../components/FollowModal'
 import toast from 'react-hot-toast'
 
 const TABS = [
@@ -24,8 +25,9 @@ export default function Profile() {
   const [isFollowing, setIsFollowing] = useState(false)
   const [loading, setLoading] = useState(true)
   const [editMode, setEditMode] = useState(false)
-  const [editData, setEditData] = useState({ display_name: '', bio: '' })
+  const [editData, setEditData] = useState({ display_name: '', bio: '', username: '' })
   const [saving, setSaving] = useState(false)
+  const [followModal, setFollowModal] = useState(null) // 'followers' | 'following' | null
 
   const isMe = user && (myProfile?.username === username || user.id === username)
 
@@ -33,14 +35,12 @@ export default function Profile() {
 
   async function loadProfile() {
     setLoading(true)
-    // UUID mi yoksa username mi?
     const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(username)
     let prof = null
 
     if (isUUID) {
       const { data } = await supabase.from('profiles').select('*').eq('id', username).single()
       prof = data
-      // Gerçek username'e yönlendir
       if (prof?.username) { navigate(`/profile/${prof.username}`, { replace: true }); return }
     } else {
       const { data } = await supabase.from('profiles').select('*').eq('username', username).single()
@@ -49,7 +49,7 @@ export default function Profile() {
 
     if (!prof) { setLoading(false); return }
     setProfile(prof)
-    setEditData({ display_name: prof.display_name || '', bio: prof.bio || '' })
+    setEditData({ display_name: prof.display_name || '', bio: prof.bio || '', username: prof.username || '' })
 
     const [postsRes, repostsRes, likedRes] = await Promise.all([
       supabase.from('posts')
@@ -66,9 +66,24 @@ export default function Profile() {
         .order('created_at', { ascending: false }),
     ])
 
-    setPosts(postsRes.data || [])
+    const rawPosts = postsRes.data || []
+
+    // Kendi postlarında user_liked durumunu da yükle
+    if (user && rawPosts.length > 0) {
+      const postIds = rawPosts.map(p => p.id)
+      const [likeRes2, repostRes2] = await Promise.all([
+        supabase.from('likes').select('post_id').eq('user_id', user.id).in('post_id', postIds),
+        supabase.from('reposts').select('post_id').eq('user_id', user.id).in('post_id', postIds),
+      ])
+      const likedIds = new Set((likeRes2.data || []).map(l => l.post_id))
+      const repostedIds = new Set((repostRes2.data || []).map(r => r.post_id))
+      setPosts(rawPosts.map(p => ({ ...p, user_liked: likedIds.has(p.id), user_reposted: repostedIds.has(p.id) })))
+    } else {
+      setPosts(rawPosts)
+    }
+
     setReposts((repostsRes.data || []).map(r => r.posts).filter(Boolean).map(p => ({ ...p, _repost: true })))
-    setLiked((likedRes.data || []).map(l => l.posts).filter(Boolean).map(p => ({ ...p, _liked: true, user_liked: true })))
+    setLiked((likedRes.data || []).map(l => ({ ...l.posts, _liked: true, user_liked: true })).filter(p => p?.id))
 
     if (user && !isMe) {
       const { data } = await supabase.from('follows')
@@ -84,30 +99,54 @@ export default function Profile() {
       await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', profile.id)
       setIsFollowing(false)
       setProfile(p => ({ ...p, followers_count: Math.max(0, (p.followers_count || 1) - 1) }))
-      await supabase.from('profiles').update({ followers_count: Math.max(0, (profile.followers_count || 1) - 1) }).eq('id', profile.id)
-      await supabase.from('profiles').update({ following_count: Math.max(0, (myProfile?.following_count || 1) - 1) }).eq('id', user.id)
+      const [{ count: nf }, { count: nfing }] = await Promise.all([
+        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', profile.id),
+        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', user.id),
+      ])
+      await Promise.all([
+        supabase.from('profiles').update({ followers_count: nf || 0 }).eq('id', profile.id),
+        supabase.from('profiles').update({ following_count: nfing || 0 }).eq('id', user.id),
+      ])
     } else {
       const { error } = await supabase.from('follows').insert({ follower_id: user.id, following_id: profile.id })
-      if (error) { toast.error('Takip hatası: ' + error.message); return }
+      if (error) { toast.error('Takip hatası'); return }
       setIsFollowing(true)
       setProfile(p => ({ ...p, followers_count: (p.followers_count || 0) + 1 }))
-      await supabase.from('profiles').update({ followers_count: (profile.followers_count || 0) + 1 }).eq('id', profile.id)
-      await supabase.from('profiles').update({ following_count: (myProfile?.following_count || 0) + 1 }).eq('id', user.id)
-      await supabase.from('notifications').insert({ user_id: profile.id, type: 'follow', from_user_id: user.id }).then(() => {})
+      const [{ count: nf }, { count: nfing }] = await Promise.all([
+        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', profile.id),
+        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', user.id),
+      ])
+      await Promise.all([
+        supabase.from('profiles').update({ followers_count: nf || 0 }).eq('id', profile.id),
+        supabase.from('profiles').update({ following_count: nfing || 0 }).eq('id', user.id),
+      ])
+      supabase.from('notifications').insert({ user_id: profile.id, type: 'follow', from_user_id: user.id })
     }
     fetchProfile(user.id)
   }
 
   async function saveProfile() {
     setSaving(true)
+    const newUsername = editData.username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '')
+
+    // Kullanıcı adı değiştiyse benzersizlik kontrolü
+    if (newUsername !== profile.username) {
+      if (newUsername.length < 3) { toast.error('Kullanıcı adı en az 3 karakter'); setSaving(false); return }
+      const { data: existing } = await supabase.from('profiles').select('id').eq('username', newUsername).maybeSingle()
+      if (existing) { toast.error('Bu kullanıcı adı alınmış'); setSaving(false); return }
+    }
+
     const { error } = await supabase.from('profiles')
-      .update({ bio: editData.bio.trim(), display_name: editData.display_name.trim() })
+      .update({ bio: editData.bio.trim(), display_name: editData.display_name.trim(), username: newUsername })
       .eq('id', user.id)
+
     if (!error) {
       toast.success('Profil güncellendi')
       setEditMode(false)
-      setProfile(p => ({ ...p, ...editData }))
+      setProfile(p => ({ ...p, ...editData, username: newUsername }))
       fetchProfile(user.id)
+      // Username değiştiyse URL'i güncelle
+      if (newUsername !== username) navigate(`/profile/${newUsername}`, { replace: true })
     } else toast.error('Hata: ' + error.message)
     setSaving(false)
   }
@@ -127,20 +166,21 @@ export default function Profile() {
   }
 
   async function deletePost(postId) {
-    if (!confirm('Bu gönderiyi silmek istiyor musun?')) return
-    await supabase.from('posts').delete().eq('id', postId)
-    setPosts(prev => prev.filter(p => p.id !== postId))
-    toast.success('Gönderi silindi')
+    if (!window.confirm('Bu gönderiyi silmek istiyor musun?')) return
+    const { error } = await supabase.from('posts').delete().eq('id', postId).eq('user_id', user.id)
+    if (!error) { setPosts(prev => prev.filter(p => p.id !== postId)); toast.success('Gönderi silindi') }
+    else toast.error('Silme hatası')
   }
 
   const currentItems = tab === 'posts' ? posts : tab === 'reposts' ? reposts : liked
 
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-brand-400" /></div>
-  if (!profile) return <div className="text-center py-20 text-gray-500"><p className="text-4xl mb-2">😕</p><p>Kullanıcı bulunamadı</p></div>
+  if (!profile) return (
+    <div className="text-center py-20 text-gray-500"><p className="text-4xl mb-2">😕</p><p>Kullanıcı bulunamadı</p></div>
+  )
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
-      {/* Profil kartı */}
       <div className="card p-6 mb-6">
         <div className="flex items-start gap-5">
           {/* Avatar */}
@@ -163,23 +203,20 @@ export default function Profile() {
               <div className="min-w-0 flex-1">
                 {editMode ? (
                   <div className="space-y-2">
-                    <input
-                      className="input text-sm"
-                      placeholder="Görünen ad (örn. Mustafa Gül)"
-                      value={editData.display_name}
-                      onChange={e => setEditData(d => ({ ...d, display_name: e.target.value }))}
-                    />
-                    <textarea
-                      className="input text-sm resize-none"
-                      rows={3}
-                      placeholder="Biyografi..."
-                      value={editData.bio}
-                      onChange={e => setEditData(d => ({ ...d, bio: e.target.value }))}
-                    />
+                    <input className="input text-sm" placeholder="Görünen ad"
+                      value={editData.display_name} onChange={e => setEditData(d => ({ ...d, display_name: e.target.value }))} />
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">@</span>
+                      <input className="input text-sm pl-7" placeholder="kullaniciadi"
+                        value={editData.username}
+                        onChange={e => setEditData(d => ({ ...d, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') }))} />
+                    </div>
+                    <textarea className="input text-sm resize-none" rows={2} placeholder="Biyografi..."
+                      value={editData.bio} onChange={e => setEditData(d => ({ ...d, bio: e.target.value }))} />
                     <div className="flex gap-2">
-                      <button onClick={saveProfile} disabled={saving} className="btn-primary text-sm px-3 py-1.5 flex items-center gap-1">
-                        {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-                        Kaydet
+                      <button onClick={saveProfile} disabled={saving}
+                        className="btn-primary text-sm px-3 py-1.5 flex items-center gap-1">
+                        {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Kaydet
                       </button>
                       <button onClick={() => setEditMode(false)} className="btn-ghost text-sm px-3 py-1.5 flex items-center gap-1">
                         <X className="w-3 h-3" /> İptal
@@ -192,7 +229,7 @@ export default function Profile() {
                     <p className="text-gray-500 text-sm">@{profile.username}</p>
                     {profile.bio
                       ? <p className="text-gray-400 text-sm mt-1">{profile.bio}</p>
-                      : isMe && <p className="text-gray-600 text-sm mt-1 italic">Biyografi ekle...</p>
+                      : isMe && <p className="text-gray-600 text-sm mt-1 italic cursor-pointer hover:text-gray-400" onClick={() => setEditMode(true)}>Biyografi ekle...</p>
                     }
                   </>
                 )}
@@ -207,9 +244,7 @@ export default function Profile() {
                 ) : user && (
                   <button onClick={toggleFollow}
                     className={`flex items-center gap-1.5 text-sm flex-shrink-0 px-3 py-2 rounded-xl font-medium transition-all ${
-                      isFollowing
-                        ? 'bg-white/10 hover:bg-red-500/10 hover:text-red-400 text-gray-300'
-                        : 'btn-primary'
+                      isFollowing ? 'bg-white/10 hover:bg-red-500/10 hover:text-red-400 text-gray-300' : 'btn-primary'
                     }`}>
                     {isFollowing ? <><UserMinus className="w-4 h-4" />Takibi Bırak</> : <><UserPlus className="w-4 h-4" />Takip Et</>}
                   </button>
@@ -222,14 +257,14 @@ export default function Profile() {
                 <p className="font-bold text-white">{posts.length}</p>
                 <p className="text-gray-500">Gönderi</p>
               </div>
-              <div className="text-center">
+              <button onClick={() => setFollowModal('followers')} className="text-center hover:opacity-70 transition-opacity">
                 <p className="font-bold text-white">{profile.followers_count || 0}</p>
                 <p className="text-gray-500">Takipçi</p>
-              </div>
-              <div className="text-center">
+              </button>
+              <button onClick={() => setFollowModal('following')} className="text-center hover:opacity-70 transition-opacity">
                 <p className="font-bold text-white">{profile.following_count || 0}</p>
                 <p className="text-gray-500">Takip</p>
-              </div>
+              </button>
             </div>
           </div>
         </div>
@@ -244,14 +279,13 @@ export default function Profile() {
             }`}>
             <Icon className="w-4 h-4" />
             <span>{label}</span>
-            <span className="text-xs text-gray-600">
+            <span className="text-xs text-gray-600 ml-0.5">
               ({tab === 'posts' ? posts.length : tab === 'reposts' ? reposts.length : liked.length})
             </span>
           </button>
         ))}
       </div>
 
-      {/* İçerik */}
       {currentItems.length === 0 ? (
         <div className="text-center py-12 text-gray-500">
           <p className="text-3xl mb-2">{tab === 'posts' ? '🎬' : tab === 'reposts' ? '🔁' : '❤️'}</p>
@@ -261,19 +295,23 @@ export default function Profile() {
         <div className="space-y-4">
           {currentItems.map(post => (
             <div key={post.id + (post._repost ? '_r' : post._liked ? '_l' : '')} className="relative">
-              <GIFCard post={post} showRepostBadge={!!post._repost} />
-              {isMe && tab === 'posts' && (
-                <button
-                  onClick={() => deletePost(post.id)}
-                  className="absolute top-3 right-12 text-gray-600 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition-all"
-                  title="Sil"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              )}
+              <GIFCard
+                post={post}
+                showRepostBadge={!!post._repost}
+                onDelete={isMe && tab === 'posts' ? deletePost : undefined}
+              />
             </div>
           ))}
         </div>
+      )}
+
+      {followModal && (
+        <FollowModal
+          profileId={profile.id}
+          type={followModal}
+          onClose={() => setFollowModal(null)}
+          onCountChange={loadProfile}
+        />
       )}
     </div>
   )
