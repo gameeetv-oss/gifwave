@@ -209,11 +209,28 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
         </div>
 
         {/* Music Player */}
-        {currentPost.music_url && (
-          <div className="px-4 pb-2">
-            <audio controls src={currentPost.music_url} className="w-full h-8" style={{ colorScheme: 'dark' }} />
-          </div>
-        )}
+        {currentPost.music_url && (() => {
+          const ytId = getYouTubeId(currentPost.music_url)
+          if (ytId) {
+            return (
+              <div className="px-4 pb-2">
+                <iframe
+                  src={`https://www.youtube-nocookie.com/embed/${ytId}?rel=0&modestbranding=1`}
+                  className="w-full rounded-lg"
+                  style={{ height: '80px' }}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  title="music"
+                />
+              </div>
+            )
+          }
+          return (
+            <div className="px-4 pb-2">
+              <audio controls src={currentPost.music_url} className="w-full h-8" style={{ colorScheme: 'dark' }} />
+            </div>
+          )
+        })()}
 
         {/* Actions */}
         <div className="flex items-center gap-1 px-3 py-3">
@@ -251,6 +268,16 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
       )}
     </>
   )
+}
+
+function getYouTubeId(url) {
+  try {
+    const u = new URL(url)
+    if (u.hostname.includes('youtube.com')) return u.searchParams.get('v')
+    if (u.hostname === 'youtu.be') return u.pathname.slice(1).split('?')[0]
+    if (u.hostname.includes('music.youtube.com')) return u.searchParams.get('v')
+  } catch { return null }
+  return null
 }
 
 function formatTime(ts) {
