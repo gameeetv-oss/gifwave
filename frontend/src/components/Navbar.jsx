@@ -3,9 +3,11 @@ import { useAuth } from '../context/AuthContext'
 import { Home, Compass, Upload, Bell, User, LogOut, Waves, MessageSquare, Search, X, BadgeCheck, Loader2 } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { usePresence } from '../context/PresenceContext'
 
 export default function Navbar() {
   const { user, profile, signOut } = useAuth()
+  const { onlineUsers } = usePresence()
   const location = useLocation()
   const navigate = useNavigate()
   const [unread, setUnread] = useState(0)
@@ -62,7 +64,7 @@ export default function Navbar() {
     clearTimeout(searchDebounce.current)
     searchDebounce.current = setTimeout(async () => {
       const { data } = await supabase.from('profiles')
-        .select('id, username, display_name, avatar_url, is_verified, followers_count')
+        .select('id, username, display_name, avatar_url, is_verified, followers_count, show_online_status')
         .or(`username.ilike.%${searchQuery}%,display_name.ilike.%${searchQuery}%`)
         .order('followers_count', { ascending: false })
         .limit(10)
@@ -145,10 +147,15 @@ export default function Navbar() {
                     onClick={() => { setSearchOpen(false); setSearchQuery('') }}
                     className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors border-b border-[#2a2a3f] last:border-0"
                   >
-                    <div className="w-10 h-10 rounded-full bg-brand-800 flex-shrink-0 overflow-hidden flex items-center justify-center text-sm font-bold text-brand-200 ring-2 ring-[#2a2a3f]">
-                      {u.avatar_url
-                        ? <img src={u.avatar_url} alt="" className="w-full h-full object-cover" />
-                        : u.username?.[0]?.toUpperCase()}
+                    <div className="relative flex-shrink-0">
+                      <div className="w-10 h-10 rounded-full bg-brand-800 overflow-hidden flex items-center justify-center text-sm font-bold text-brand-200 ring-2 ring-[#2a2a3f]">
+                        {u.avatar_url
+                          ? <img src={u.avatar_url} alt="" className="w-full h-full object-cover" />
+                          : u.username?.[0]?.toUpperCase()}
+                      </div>
+                      {onlineUsers.has(u.id) && u.show_online_status !== false && (
+                        <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-[#12121e]" />
+                      )}
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-white flex items-center gap-1">

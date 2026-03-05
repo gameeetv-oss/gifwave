@@ -9,6 +9,7 @@ import {
 import GIFCard from '../components/GIFCard'
 import FollowModal from '../components/FollowModal'
 import { useBlock } from '../context/BlockContext'
+import { usePresence } from '../context/PresenceContext'
 import toast from 'react-hot-toast'
 
 const TABS = [
@@ -40,6 +41,7 @@ export default function Profile() {
 
   const isMe = user && (myProfile?.username === username || user.id === username)
   const { blockedIds, allBlockedIds, loadBlocks } = useBlock()
+  const { onlineUsers } = usePresence()
 
   useEffect(() => { loadProfile() }, [username])
 
@@ -59,7 +61,7 @@ export default function Profile() {
 
     if (!prof) { setLoading(false); return }
     setProfile(prof)
-    setEditData({ display_name: prof.display_name || '', bio: prof.bio || '', username: prof.username || '' })
+    setEditData({ display_name: prof.display_name || '', bio: prof.bio || '', username: prof.username || '', show_online_status: prof.show_online_status !== false })
 
     const [postsRes, repostsRes, likedRes] = await Promise.all([
       supabase.from('posts')
@@ -170,7 +172,7 @@ export default function Profile() {
       if (existing) { toast.error('Bu kullanıcı adı alınmış'); setSaving(false); return }
     }
     const { error } = await supabase.from('profiles')
-      .update({ bio: editData.bio.trim(), display_name: editData.display_name.trim(), username: newUsername })
+      .update({ bio: editData.bio.trim(), display_name: editData.display_name.trim(), username: newUsername, show_online_status: editData.show_online_status })
       .eq('id', user.id)
     if (!error) {
       toast.success('Profil güncellendi')
@@ -263,10 +265,13 @@ export default function Profile() {
                 : (profile.display_name || profile.username)?.[0]?.toUpperCase()}
             </div>
             {isMe && (
-              <label className="absolute -bottom-1 -right-1 bg-brand-500 rounded-full p-1.5 cursor-pointer hover:bg-brand-600 transition-colors">
+              <label className="absolute -bottom-1 -right-1 bg-brand-500 rounded-full p-1.5 cursor-pointer hover:bg-brand-600 transition-colors z-10">
                 <Camera className="w-3.5 h-3.5 text-white" />
                 <input type="file" accept="image/*" className="hidden" onChange={uploadAvatar} />
               </label>
+            )}
+            {!isMe && onlineUsers.has(profile.id) && profile.show_online_status !== false && (
+              <span className="absolute bottom-1 right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-[#0d0d1a]" />
             )}
           </div>
 
@@ -287,24 +292,29 @@ export default function Profile() {
                       value={editData.bio} onChange={e => setEditData(d => ({ ...d, bio: e.target.value }))} />
 
                     {/* Gizlilik Ayarları */}
-                    {editSettings && (
-                      <div className="border border-[#2a2a3f] rounded-xl p-3 space-y-2">
-                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Gizlilik</p>
-                        {[
-                          { key: 'is_private',          label: 'Gizli hesap (takip isteği gönderilir)' },
-                          { key: 'show_liked_posts',    label: 'Beğendiklerimi göster' },
-                          { key: 'allow_dm',            label: 'Mesaj almaya izin ver' },
-                          { key: 'show_read_receipts',  label: 'Okundu bilgisi gönder' },
-                        ].map(({ key, label }) => (
-                          <label key={key} className="flex items-center justify-between text-sm text-gray-300 cursor-pointer select-none">
-                            <span className="text-xs">{label}</span>
-                            <input type="checkbox" checked={!!editSettings[key]} className="ml-2 accent-brand-500"
-                              onChange={e => setEditSettings(s => ({ ...s, [key]: e.target.checked }))} />
-                          </label>
-                        ))}
+                    <div className="border border-[#2a2a3f] rounded-xl p-3 space-y-2">
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Gizlilik</p>
+                      <label className="flex items-center justify-between text-sm text-gray-300 cursor-pointer select-none">
+                        <span className="text-xs">Çevrimiçi durumumu göster</span>
+                        <input type="checkbox" checked={!!editData.show_online_status} className="ml-2 accent-brand-500"
+                          onChange={e => setEditData(d => ({ ...d, show_online_status: e.target.checked }))} />
+                      </label>
+                      {editSettings && [
+                        { key: 'is_private',          label: 'Gizli hesap (takip isteği gönderilir)' },
+                        { key: 'show_liked_posts',    label: 'Beğendiklerimi göster' },
+                        { key: 'allow_dm',            label: 'Mesaj almaya izin ver' },
+                        { key: 'show_read_receipts',  label: 'Okundu bilgisi gönder' },
+                      ].map(({ key, label }) => (
+                        <label key={key} className="flex items-center justify-between text-sm text-gray-300 cursor-pointer select-none">
+                          <span className="text-xs">{label}</span>
+                          <input type="checkbox" checked={!!editSettings[key]} className="ml-2 accent-brand-500"
+                            onChange={e => setEditSettings(s => ({ ...s, [key]: e.target.checked }))} />
+                        </label>
+                      ))}
+                      {editSettings && (
                         <button onClick={saveSettings} className="btn-ghost text-xs px-2 py-1 mt-1">Ayarları Kaydet</button>
-                      </div>
-                    )}
+                      )}
+                    </div>
 
                     <div className="flex gap-2">
                       <button onClick={saveProfile} disabled={saving}

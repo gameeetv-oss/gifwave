@@ -3,11 +3,13 @@ import { Heart, MessageCircle, Share2, Repeat2, MoreHorizontal, Pencil, Check, X
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import { usePresence } from '../context/PresenceContext'
 import toast from 'react-hot-toast'
 import CommentModal from './CommentModal'
 
 export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete }) {
   const { user } = useAuth()
+  const { onlineUsers } = usePresence()
   const [liked, setLiked] = useState(post.user_liked || false)
   const [likeCount, setLikeCount] = useState(post.likes_count || 0)
   const [commentCount, setCommentCount] = useState(post.comments_count || 0)
@@ -109,11 +111,16 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
         {/* Header */}
         <div className="flex items-center justify-between px-4 pt-3 pb-3">
           <Link to={`/profile/${username}`} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-            <div className="w-9 h-9 rounded-full overflow-hidden bg-brand-800 flex-shrink-0">
-              {avatarUrl
-                ? <img src={avatarUrl} alt={username} className="w-full h-full object-cover" />
-                : <div className="w-full h-full flex items-center justify-center text-brand-200 text-sm font-bold">{username[0]?.toUpperCase()}</div>
-              }
+            <div className="relative flex-shrink-0">
+              <div className="w-9 h-9 rounded-full overflow-hidden bg-brand-800">
+                {avatarUrl
+                  ? <img src={avatarUrl} alt={username} className="w-full h-full object-cover" />
+                  : <div className="w-full h-full flex items-center justify-center text-brand-200 text-sm font-bold">{username[0]?.toUpperCase()}</div>
+                }
+              </div>
+              {onlineUsers.has(post.user_id) && post.profiles?.show_online_status !== false && (
+                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-[#12121e]" />
+              )}
             </div>
             <div>
               <p className="font-semibold text-sm text-white flex items-center gap-1">

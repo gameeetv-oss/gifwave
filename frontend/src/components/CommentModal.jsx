@@ -3,11 +3,13 @@ import { X, Send, Heart, CornerDownRight, BadgeCheck, Trash2, Pencil, Check } fr
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useBlock } from '../context/BlockContext'
+import { usePresence } from '../context/PresenceContext'
 import toast from 'react-hot-toast'
 
 export default function CommentModal({ post, onClose }) {
   const { user } = useAuth()
   const { allBlockedIds } = useBlock()
+  const { onlineUsers } = usePresence()
   const [comments, setComments] = useState([])
   const [text, setText] = useState('')
   const [loading, setLoading] = useState(false)
@@ -28,7 +30,7 @@ export default function CommentModal({ post, onClose }) {
   async function loadComments() {
     const { data } = await supabase
       .from('comments')
-      .select('*, profiles!fk_comments_profiles(username, display_name, avatar_url, is_verified)')
+      .select('*, profiles!fk_comments_profiles(username, display_name, avatar_url, is_verified, show_online_status)')
       .eq('post_id', post.id)
       .order('created_at', { ascending: true })
     const all = data || []
@@ -119,10 +121,15 @@ export default function CommentModal({ post, onClose }) {
   function CommentItem({ c, isReply }) {
     return (
       <div className={`flex gap-3 ${isReply ? 'ml-10 mt-1.5' : ''}`}>
-        <div className="w-7 h-7 rounded-full bg-brand-800 flex-shrink-0 flex items-center justify-center text-xs font-bold text-brand-200 overflow-hidden">
-          {c.profiles?.avatar_url
-            ? <img src={c.profiles.avatar_url} alt="" className="w-full h-full object-cover" />
-            : c.profiles?.username?.[0]?.toUpperCase()}
+        <div className="relative flex-shrink-0">
+          <div className="w-7 h-7 rounded-full bg-brand-800 flex items-center justify-center text-xs font-bold text-brand-200 overflow-hidden">
+            {c.profiles?.avatar_url
+              ? <img src={c.profiles.avatar_url} alt="" className="w-full h-full object-cover" />
+              : c.profiles?.username?.[0]?.toUpperCase()}
+          </div>
+          {onlineUsers.has(c.user_id) && c.profiles?.show_online_status !== false && (
+            <span className="absolute bottom-0 right-0 w-2 h-2 bg-green-500 rounded-full border-2 border-[#12121e]" />
+          )}
         </div>
         <div className="flex-1 min-w-0">
           {editingId === c.id ? (
