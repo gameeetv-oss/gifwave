@@ -55,15 +55,15 @@ export default function Profile() {
 
     const [postsRes, repostsRes, likedRes] = await Promise.all([
       supabase.from('posts')
-        .select('*, profiles!fk_posts_profiles(username, display_name, avatar_url)')
+        .select('*, profiles!fk_posts_profiles(username, display_name, avatar_url, is_verified)')
         .eq('user_id', prof.id)
         .order('created_at', { ascending: false }),
       supabase.from('reposts')
-        .select('post_id, created_at, posts(*, profiles!fk_posts_profiles(username, display_name, avatar_url))')
+        .select('post_id, created_at, posts(*, profiles!fk_posts_profiles(username, display_name, avatar_url, is_verified))')
         .eq('user_id', prof.id)
         .order('created_at', { ascending: false }),
       supabase.from('likes')
-        .select('post_id, created_at, posts(*, profiles!fk_posts_profiles(username, display_name, avatar_url))')
+        .select('post_id, created_at, posts(*, profiles!fk_posts_profiles(username, display_name, avatar_url, is_verified))')
         .eq('user_id', prof.id)
         .order('created_at', { ascending: false }),
     ])
@@ -261,10 +261,7 @@ export default function Profile() {
                     <h1 className="font-bold text-xl flex items-center gap-1.5">
                       {profile.display_name || profile.username}
                       {profile.is_verified && (
-                        <span className="inline-flex items-center gap-0.5">
-                          <BadgeCheck className="w-5 h-5 text-blue-400" />
-                          <span className="text-base">🌊</span>
-                        </span>
+                        <BadgeCheck className="w-5 h-5 text-blue-400" />
                       )}
                     </h1>
                     <p className="text-gray-500 text-sm">@{profile.username}</p>

@@ -113,7 +113,7 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
             <div>
               <p className="font-semibold text-sm text-white flex items-center gap-1">
                 {displayName}
-                {post.profiles?.is_verified && <BadgeCheck className="w-4 h-4 text-blue-400 flex-shrink-0" />}
+                {post.profiles?.is_verified && <BadgeCheck className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
               </p>
               <p className="text-xs text-gray-500">@{username} · {formatTime(post.created_at)}</p>
             </div>

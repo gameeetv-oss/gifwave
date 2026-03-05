@@ -29,7 +29,7 @@ export default function Feed({ mode = 'all' }) {
         if (ids.length === 0) { setHasMore(false); return }
         const { data: postsData } = await supabase
           .from('posts')
-          .select('*, profiles!fk_posts_profiles(username, display_name, avatar_url)')
+          .select('*, profiles!fk_posts_profiles(username, display_name, avatar_url, is_verified)')
           .in('user_id', ids)
           .order('created_at', { ascending: false })
           .range(pageNum * PAGE_SIZE, (pageNum + 1) * PAGE_SIZE - 1)
@@ -37,7 +37,7 @@ export default function Feed({ mode = 'all' }) {
       } else {
         const { data: postsData } = await supabase
           .from('posts')
-          .select('*, profiles!fk_posts_profiles(username, display_name, avatar_url)')
+          .select('*, profiles!fk_posts_profiles(username, display_name, avatar_url, is_verified)')
           .order('created_at', { ascending: false })
           .range(pageNum * PAGE_SIZE, (pageNum + 1) * PAGE_SIZE - 1)
         data = postsData || []
