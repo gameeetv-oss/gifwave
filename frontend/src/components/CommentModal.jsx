@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { X, Send, Heart, CornerDownRight } from 'lucide-react'
+import { X, Send, Heart, CornerDownRight, BadgeCheck } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
@@ -24,7 +24,7 @@ export default function CommentModal({ post, onClose }) {
   async function loadComments() {
     const { data } = await supabase
       .from('comments')
-      .select('*, profiles!fk_comments_profiles(username, display_name, avatar_url)')
+      .select('*, profiles!fk_comments_profiles(username, display_name, avatar_url, is_verified)')
       .eq('post_id', post.id)
       .order('created_at', { ascending: true })
     const all = data || []
@@ -104,7 +104,10 @@ export default function CommentModal({ post, onClose }) {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm">
-            <span className="font-semibold text-brand-400">{c.profiles?.display_name || c.profiles?.username}</span>
+            <span className="inline-flex items-center gap-0.5 font-semibold text-brand-400">
+              {c.profiles?.display_name || c.profiles?.username}
+              {c.profiles?.is_verified && <BadgeCheck className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
+            </span>
             {' '}<span className="text-gray-300">{c.text}</span>
           </p>
           <div className="flex items-center gap-3 mt-0.5">
