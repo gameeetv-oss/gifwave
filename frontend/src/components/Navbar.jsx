@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { Home, Compass, Upload, Bell, User, LogOut, Waves, MessageSquare, Search, X } from 'lucide-react'
+import { Home, Compass, Upload, Bell, User, LogOut, Waves, MessageSquare, Search, X, BadgeCheck, Loader2 } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 
@@ -13,6 +13,7 @@ export default function Navbar() {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState([])
   const [searchOpen, setSearchOpen] = useState(false)
+  const [searchLoading, setSearchLoading] = useState(false)
   const searchRef = useRef(null)
   const searchDebounce = useRef(null)
 
@@ -56,14 +57,17 @@ export default function Navbar() {
 
   // Arama
   useEffect(() => {
-    if (!searchQuery.trim()) { setSearchResults([]); return }
+    if (!searchQuery.trim()) { setSearchResults([]); setSearchLoading(false); return }
+    setSearchLoading(true)
     clearTimeout(searchDebounce.current)
     searchDebounce.current = setTimeout(async () => {
       const { data } = await supabase.from('profiles')
-        .select('id, username, display_name, avatar_url, is_verified')
+        .select('id, username, display_name, avatar_url, is_verified, followers_count')
         .or(`username.ilike.%${searchQuery}%,display_name.ilike.%${searchQuery}%`)
-        .limit(8)
+        .order('followers_count', { ascending: false })
+        .limit(10)
       setSearchResults(data || [])
+      setSearchLoading(false)
     }, 300)
   }, [searchQuery])
 
@@ -102,9 +106,12 @@ export default function Navbar() {
         </Link>
 
         {/* Arama */}
-        <div className="flex-1 max-w-xs relative" ref={searchRef}>
+        <div className="flex-1 max-w-sm relative" ref={searchRef}>
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            {searchLoading
+              ? <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-400 animate-spin" />
+              : <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            }
             <input
               className="w-full bg-[#1a1a2e] border border-[#2a2a3f] rounded-xl py-2 pl-9 pr-8 text-sm text-gray-300 placeholder-gray-600 focus:outline-none focus:border-brand-500 transition-colors"
               placeholder="Kullanıcı ara..."
@@ -113,34 +120,49 @@ export default function Navbar() {
               onFocus={() => setSearchOpen(true)}
             />
             {searchQuery && (
-              <button onClick={() => { setSearchQuery(''); setSearchResults([]) }}
+              <button onClick={() => { setSearchQuery(''); setSearchResults([]); setSearchLoading(false) }}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white">
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
 
-          {searchOpen && searchResults.length > 0 && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-[#1a1a2e] border border-[#3a3a5c] rounded-xl shadow-xl overflow-hidden z-50">
-              {searchResults.map(u => (
-                <Link
-                  key={u.id}
-                  to={`/profile/${u.username}`}
-                  onClick={() => { setSearchOpen(false); setSearchQuery('') }}
-                  className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/5 transition-colors"
-                >
-                  <div className="w-8 h-8 rounded-full bg-brand-800 flex-shrink-0 overflow-hidden flex items-center justify-center text-xs font-bold text-brand-200">
-                    {u.avatar_url ? <img src={u.avatar_url} alt="" className="w-full h-full object-cover" /> : u.username?.[0]?.toUpperCase()}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-white truncate flex items-center gap-1">
-                      {u.display_name || u.username}
-                      {u.is_verified && <span className="text-blue-400 text-xs">✓</span>}
-                    </p>
-                    <p className="text-xs text-gray-500">@{u.username}</p>
-                  </div>
-                </Link>
-              ))}
+          {searchOpen && searchQuery.trim() && (
+            <div className="absolute top-full left-0 right-0 mt-2 bg-[#12121e] border border-[#3a3a5c] rounded-2xl shadow-2xl overflow-hidden z-50">
+              {searchLoading ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="w-5 h-5 text-brand-400 animate-spin" />
+                </div>
+              ) : searchResults.length === 0 ? (
+                <div className="px-4 py-5 text-center text-sm text-gray-500">
+                  "<span className="text-gray-300">{searchQuery}</span>" için sonuç bulunamadı
+                </div>
+              ) : (
+                searchResults.map(u => (
+                  <Link
+                    key={u.id}
+                    to={`/profile/${u.username}`}
+                    onClick={() => { setSearchOpen(false); setSearchQuery('') }}
+                    className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors border-b border-[#2a2a3f] last:border-0"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-brand-800 flex-shrink-0 overflow-hidden flex items-center justify-center text-sm font-bold text-brand-200 ring-2 ring-[#2a2a3f]">
+                      {u.avatar_url
+                        ? <img src={u.avatar_url} alt="" className="w-full h-full object-cover" />
+                        : u.username?.[0]?.toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-white flex items-center gap-1">
+                        {u.username}
+                        {u.is_verified && <BadgeCheck className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
+                      </p>
+                      <p className="text-xs text-gray-400 truncate">
+                        {u.display_name && u.display_name !== u.username ? u.display_name + ' · ' : ''}
+                        {u.followers_count > 0 ? `${u.followers_count} takipçi` : 'Yeni üye'}
+                      </p>
+                    </div>
+                  </Link>
+                ))
+              )}
             </div>
           )}
         </div>
