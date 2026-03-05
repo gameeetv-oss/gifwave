@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { X, Send, Heart, CornerDownRight, BadgeCheck, Trash2 } from 'lucide-react'
+import { X, Send, Heart, CornerDownRight, BadgeCheck, Trash2, Pencil, Check } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useBlock } from '../context/BlockContext'
@@ -16,6 +16,8 @@ export default function CommentModal({ post, onClose }) {
   const [replyText, setReplyText] = useState('')
   const [replyLoading, setReplyLoading] = useState(false)
   const [myLikes, setMyLikes] = useState(new Set())
+  const [editingId, setEditingId] = useState(null)
+  const [editText, setEditText] = useState('')
 
   useEffect(() => {
     loadComments()
@@ -77,6 +79,15 @@ export default function CommentModal({ post, onClose }) {
     setReplyLoading(false)
   }
 
+  async function saveEdit(commentId) {
+    if (!editText.trim()) return
+    const { error } = await supabase.from('comments').update({ text: editText.trim() }).eq('id', commentId).eq('user_id', user.id)
+    if (!error) {
+      setComments(cs => cs.map(c => c.id === commentId ? { ...c, text: editText.trim() } : c))
+      setEditingId(null)
+    }
+  }
+
   async function deleteComment(commentId) {
     const { error } = await supabase.from('comments').delete().eq('id', commentId).eq('user_id', user.id)
     if (!error) {
@@ -114,13 +125,31 @@ export default function CommentModal({ post, onClose }) {
             : c.profiles?.username?.[0]?.toUpperCase()}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm">
-            <span className="inline-flex items-center gap-0.5 font-semibold text-brand-400">
-              {c.profiles?.display_name || c.profiles?.username}
-              {c.profiles?.is_verified && <BadgeCheck className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
-            </span>
-            {' '}<span className="text-gray-300">{c.text}</span>
-          </p>
+          {editingId === c.id ? (
+            <div className="flex gap-2 items-center">
+              <input
+                className="input flex-1 text-xs py-1.5"
+                value={editText}
+                onChange={e => setEditText(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') saveEdit(c.id); if (e.key === 'Escape') setEditingId(null) }}
+                autoFocus
+              />
+              <button onClick={() => saveEdit(c.id)} className="text-brand-400 hover:text-brand-300">
+                <Check className="w-3.5 h-3.5" />
+              </button>
+              <button onClick={() => setEditingId(null)} className="text-gray-500 hover:text-white">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <p className="text-sm">
+              <span className="inline-flex items-center gap-0.5 font-semibold text-brand-400">
+                {c.profiles?.display_name || c.profiles?.username}
+                {c.profiles?.is_verified && <BadgeCheck className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
+              </span>
+              {' '}<span className="text-gray-300">{c.text}</span>
+            </p>
+          )}
           <div className="flex items-center gap-3 mt-0.5">
             <p className="text-xs text-gray-600">{new Date(c.created_at).toLocaleString('tr-TR')}</p>
             <button
@@ -137,11 +166,18 @@ export default function CommentModal({ post, onClose }) {
               </button>
             )}
             {user?.id === c.user_id && (
-              <button
-                onClick={() => deleteComment(c.id)}
-                className="text-xs text-gray-600 hover:text-red-400 transition-colors flex items-center gap-1">
-                <Trash2 className="w-3 h-3" />
-              </button>
+              <>
+                <button
+                  onClick={() => { setEditingId(c.id); setEditText(c.text); setReplyTo(null) }}
+                  className="text-xs text-gray-600 hover:text-brand-400 transition-colors">
+                  <Pencil className="w-3 h-3" />
+                </button>
+                <button
+                  onClick={() => deleteComment(c.id)}
+                  className="text-xs text-gray-600 hover:text-red-400 transition-colors">
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </>
             )}
           </div>
           {/* Reply input */}
