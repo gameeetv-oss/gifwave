@@ -43,7 +43,7 @@ export default function Profile() {
   const { blockedIds, allBlockedIds, loadBlocks } = useBlock()
   const { onlineUsers } = usePresence()
 
-  useEffect(() => { loadProfile() }, [username])
+  useEffect(() => { loadProfile() }, [username, user?.id])
 
   async function loadProfile() {
     setLoading(true)

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Heart, MessageCircle, Share2, Repeat2, MoreHorizontal, Pencil, Check, X, Loader2, Trash2, BadgeCheck } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
@@ -24,6 +24,9 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
   const [showOverlay, setShowOverlay] = useState(post.show_overlay || false)
   const [saving, setSaving] = useState(false)
   const [currentPost, setCurrentPost] = useState(post)
+
+  useEffect(() => { setLiked(post.user_liked || false) }, [post.user_liked])
+  useEffect(() => { setReposted(post.user_reposted || false) }, [post.user_reposted])
 
   const isOwner = user?.id === post.user_id
 
