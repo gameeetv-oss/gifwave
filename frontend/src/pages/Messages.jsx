@@ -109,12 +109,12 @@ export default function Messages() {
     if (!profRes.data) { toast.error('Kullanıcı bulunamadı'); return }
     setActiveConv({ profile: profRes.data, messages: msgsRes.data || [] })
     setPartnerSettings({ show_read_receipts: settRes.data?.show_read_receipts ?? true })
+    // Konuşma listesindeki unread badge'ini sıfırla
+    setConversations(cs => cs.map(c => c.profile?.id === otherUserId ? { ...c, unread: 0 } : c))
 
-    // Gelen mesajları okundu yap (eğer benim ayarım açıksa)
-    if (myReceiptsRef.current) {
-      await supabase.from('messages').update({ read: true })
-        .eq('sender_id', otherUserId).eq('receiver_id', user.id).eq('read', false)
-    }
+    // Gelen mesajları her zaman okundu yap (badge temizlenmesi için)
+    await supabase.from('messages').update({ read: true })
+      .eq('sender_id', otherUserId).eq('receiver_id', user.id).eq('read', false)
 
     // Realtime: yeni mesaj + read güncellemesi
     if (channelRef.current) supabase.removeChannel(channelRef.current)
@@ -126,9 +126,8 @@ export default function Messages() {
       }, async (payload) => {
         if (payload.new.sender_id !== otherUserId) return
         setActiveConv(c => c ? { ...c, messages: [...c.messages, payload.new] } : c)
-        if (myReceiptsRef.current) {
-          await supabase.from('messages').update({ read: true }).eq('id', payload.new.id)
-        }
+        // Konuşma açıkken gelen mesajı her zaman okundu yap
+        await supabase.from('messages').update({ read: true }).eq('id', payload.new.id)
       })
       .on('postgres_changes', {
         event: 'UPDATE', schema: 'public', table: 'messages',
