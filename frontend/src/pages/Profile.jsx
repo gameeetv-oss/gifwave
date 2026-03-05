@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
-import { Camera, Loader2, UserPlus, UserMinus, Heart, Repeat2, Grid3x3, Pencil, Trash2, Check, X } from 'lucide-react'
+import { Camera, Loader2, UserPlus, UserMinus, Heart, Repeat2, Grid3x3, Pencil, Trash2, Check, X, BadgeCheck, MessageSquare } from 'lucide-react'
 import GIFCard from '../components/GIFCard'
 import FollowModal from '../components/FollowModal'
 import toast from 'react-hot-toast'
@@ -28,6 +28,8 @@ export default function Profile() {
   const [editData, setEditData] = useState({ display_name: '', bio: '', username: '' })
   const [saving, setSaving] = useState(false)
   const [followModal, setFollowModal] = useState(null) // 'followers' | 'following' | null
+  const [settings, setSettings] = useState(null)
+  const [editSettings, setEditSettings] = useState(null)
 
   const isMe = user && (myProfile?.username === username || user.id === username)
 
@@ -90,6 +92,13 @@ export default function Profile() {
         .select('follower_id').eq('follower_id', user.id).eq('following_id', prof.id).maybeSingle()
       setIsFollowing(!!data)
     }
+
+    // user_settings yükle
+    const { data: settData } = await supabase.from('user_settings').select('*').eq('user_id', prof.id).maybeSingle()
+    const defaultSett = { is_private: false, who_can_comment: 'all', who_can_reply: 'all', show_liked_posts: true, allow_dm: true }
+    setSettings(settData || defaultSett)
+    if (isMe) setEditSettings(settData || defaultSett)
+
     setLoading(false)
   }
 
@@ -120,7 +129,7 @@ export default function Profile() {
         supabase.from('profiles').update({ followers_count: nf || 0 }).eq('id', profile.id),
         supabase.from('profiles').update({ following_count: nfing || 0 }).eq('id', user.id),
       ])
-      supabase.from('notifications').insert({ user_id: profile.id, type: 'follow', from_user_id: user.id })
+      await supabase.from('notifications').insert({ user_id: profile.id, type: 'follow', from_user_id: user.id })
     }
     fetchProfile(user.id)
   }
@@ -163,6 +172,13 @@ export default function Profile() {
     toast.success('Profil fotoğrafı güncellendi')
     setProfile(p => ({ ...p, avatar_url: publicUrl }))
     fetchProfile(user.id)
+  }
+
+  async function saveSettings() {
+    if (!editSettings) return
+    const { error } = await supabase.from('user_settings').upsert({ user_id: user.id, ...editSettings })
+    if (!error) { setSettings(editSettings); toast.success('Ayarlar kaydedildi') }
+    else toast.error('Ayar kaydı hatası')
   }
 
   async function deletePost(postId) {
@@ -213,6 +229,23 @@ export default function Profile() {
                     </div>
                     <textarea className="input text-sm resize-none" rows={2} placeholder="Biyografi..."
                       value={editData.bio} onChange={e => setEditData(d => ({ ...d, bio: e.target.value }))} />
+                    {/* Gizlilik Ayarları */}
+                    {editSettings && (
+                      <div className="border border-[#2a2a3f] rounded-xl p-3 space-y-2">
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Gizlilik</p>
+                        {[
+                          { key: 'is_private', label: 'Gizli hesap' },
+                          { key: 'show_liked_posts', label: 'Beğendiklerimi göster' },
+                          { key: 'allow_dm', label: 'Mesaj almaya izin ver' },
+                        ].map(({ key, label }) => (
+                          <label key={key} className="flex items-center justify-between text-sm text-gray-300 cursor-pointer">
+                            <span>{label}</span>
+                            <input type="checkbox" checked={!!editSettings[key]} onChange={e => setEditSettings(s => ({ ...s, [key]: e.target.checked }))} className="ml-2" />
+                          </label>
+                        ))}
+                        <button onClick={saveSettings} className="btn-ghost text-xs px-2 py-1 mt-1">Ayarları Kaydet</button>
+                      </div>
+                    )}
                     <div className="flex gap-2">
                       <button onClick={saveProfile} disabled={saving}
                         className="btn-primary text-sm px-3 py-1.5 flex items-center gap-1">
@@ -225,7 +258,15 @@ export default function Profile() {
                   </div>
                 ) : (
                   <>
-                    <h1 className="font-bold text-xl">{profile.display_name || profile.username}</h1>
+                    <h1 className="font-bold text-xl flex items-center gap-1.5">
+                      {profile.display_name || profile.username}
+                      {profile.is_verified && (
+                        <span className="inline-flex items-center gap-0.5">
+                          <BadgeCheck className="w-5 h-5 text-blue-400" />
+                          <span className="text-base">🌊</span>
+                        </span>
+                      )}
+                    </h1>
                     <p className="text-gray-500 text-sm">@{profile.username}</p>
                     {profile.bio
                       ? <p className="text-gray-400 text-sm mt-1">{profile.bio}</p>
@@ -242,12 +283,20 @@ export default function Profile() {
                     <Pencil className="w-3.5 h-3.5" /> Düzenle
                   </button>
                 ) : user && (
-                  <button onClick={toggleFollow}
-                    className={`flex items-center gap-1.5 text-sm flex-shrink-0 px-3 py-2 rounded-xl font-medium transition-all ${
-                      isFollowing ? 'bg-white/10 hover:bg-red-500/10 hover:text-red-400 text-gray-300' : 'btn-primary'
-                    }`}>
-                    {isFollowing ? <><UserMinus className="w-4 h-4" />Takibi Bırak</> : <><UserPlus className="w-4 h-4" />Takip Et</>}
-                  </button>
+                  <div className="flex gap-2 flex-shrink-0">
+                    <button onClick={toggleFollow}
+                      className={`flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl font-medium transition-all ${
+                        isFollowing ? 'bg-white/10 hover:bg-red-500/10 hover:text-red-400 text-gray-300' : 'btn-primary'
+                      }`}>
+                      {isFollowing ? <><UserMinus className="w-4 h-4" />Takibi Bırak</> : <><UserPlus className="w-4 h-4" />Takip Et</>}
+                    </button>
+                    {settings?.allow_dm !== false && (
+                      <Link to={`/messages/${profile.id}`}
+                        className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl font-medium bg-white/10 hover:bg-brand-500/20 hover:text-brand-400 text-gray-300 transition-all">
+                        <MessageSquare className="w-4 h-4" /> Mesaj
+                      </Link>
+                    )}
+                  </div>
                 )
               )}
             </div>
@@ -272,7 +321,7 @@ export default function Profile() {
 
       {/* Tabs */}
       <div className="flex border-b border-[#2a2a3f] mb-4">
-        {TABS.map(({ id, label, icon: Icon }) => (
+        {TABS.filter(t => t.id !== 'liked' || isMe || settings?.show_liked_posts !== false).map(({ id, label, icon: Icon }) => (
           <button key={id} onClick={() => setTab(id)}
             className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-sm font-medium transition-colors ${
               tab === id ? 'text-brand-400 border-b-2 border-brand-400' : 'text-gray-400 hover:text-white'
@@ -280,7 +329,7 @@ export default function Profile() {
             <Icon className="w-4 h-4" />
             <span>{label}</span>
             <span className="text-xs text-gray-600 ml-0.5">
-              ({tab === 'posts' ? posts.length : tab === 'reposts' ? reposts.length : liked.length})
+              ({id === 'posts' ? posts.length : id === 'reposts' ? reposts.length : liked.length})
             </span>
           </button>
         ))}

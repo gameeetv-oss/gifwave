@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS posts (
   likes_count INTEGER DEFAULT 0,
   comments_count INTEGER DEFAULT 0,
   source TEXT DEFAULT 'upload', -- upload | giphy | converted
+  music_url TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -41,6 +42,8 @@ CREATE TABLE IF NOT EXISTS comments (
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
   text TEXT NOT NULL,
+  parent_id UUID REFERENCES comments(id) ON DELETE CASCADE,
+  likes_count INTEGER DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -51,6 +54,56 @@ CREATE TABLE IF NOT EXISTS follows (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   PRIMARY KEY (follower_id, following_id)
 );
+
+-- Profil doğrulaması
+-- ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE;
+
+-- Yorum beğenileri
+CREATE TABLE IF NOT EXISTS comment_likes (
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  comment_id UUID REFERENCES comments(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (user_id, comment_id)
+);
+
+-- Gizlilik ayarları
+CREATE TABLE IF NOT EXISTS user_settings (
+  user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  is_private BOOLEAN DEFAULT FALSE,
+  who_can_comment TEXT DEFAULT 'all',
+  who_can_reply TEXT DEFAULT 'all',
+  show_liked_posts BOOLEAN DEFAULT TRUE,
+  allow_dm BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- DM Mesajlar
+CREATE TABLE IF NOT EXISTS messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  sender_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  receiver_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  text TEXT NOT NULL,
+  read BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Follow count trigger
+CREATE OR REPLACE FUNCTION fn_update_follow_counts()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    UPDATE profiles SET followers_count = (SELECT COUNT(*) FROM follows WHERE following_id = NEW.following_id) WHERE id = NEW.following_id;
+    UPDATE profiles SET following_count = (SELECT COUNT(*) FROM follows WHERE follower_id = NEW.follower_id) WHERE id = NEW.follower_id;
+  ELSIF TG_OP = 'DELETE' THEN
+    UPDATE profiles SET followers_count = (SELECT COUNT(*) FROM follows WHERE following_id = OLD.following_id) WHERE id = OLD.following_id;
+    UPDATE profiles SET following_count = (SELECT COUNT(*) FROM follows WHERE follower_id = OLD.follower_id) WHERE id = OLD.follower_id;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS trigger_follow_counts ON follows;
+CREATE TRIGGER trigger_follow_counts AFTER INSERT OR DELETE ON follows FOR EACH ROW EXECUTE FUNCTION fn_update_follow_counts();
 
 -- Bildirimler
 CREATE TABLE IF NOT EXISTS notifications (
@@ -109,6 +162,24 @@ CREATE POLICY "comments_delete" ON comments FOR DELETE USING (auth.uid() = user_
 CREATE POLICY "follows_select" ON follows FOR SELECT USING (true);
 CREATE POLICY "follows_insert" ON follows FOR INSERT WITH CHECK (auth.uid() = follower_id);
 CREATE POLICY "follows_delete" ON follows FOR DELETE USING (auth.uid() = follower_id);
+
+-- Comment likes
+ALTER TABLE comment_likes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "cl_select" ON comment_likes FOR SELECT USING (true);
+CREATE POLICY "cl_insert" ON comment_likes FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "cl_delete" ON comment_likes FOR DELETE USING (auth.uid() = user_id);
+
+-- User settings
+ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "us_select" ON user_settings FOR SELECT USING (true);
+CREATE POLICY "us_insert" ON user_settings FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "us_update" ON user_settings FOR UPDATE USING (auth.uid() = user_id);
+
+-- Messages
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "msg_select" ON messages FOR SELECT USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
+CREATE POLICY "msg_insert" ON messages FOR INSERT WITH CHECK (auth.uid() = sender_id);
+CREATE POLICY "msg_update" ON messages FOR UPDATE USING (auth.uid() = receiver_id);
 
 -- Notifications: sadece kendi bildirimlerini görebilir
 CREATE POLICY "notifications_select" ON notifications FOR SELECT USING (auth.uid() = user_id);

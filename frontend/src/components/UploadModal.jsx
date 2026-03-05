@@ -11,6 +11,7 @@ export default function UploadModal({ onClose, onSuccess }) {
   const [tab, setTab] = useState('upload') // upload | giphy | convert
   const [caption, setCaption] = useState('')
   const [tags, setTags] = useState('')
+  const [musicUrl, setMusicUrl] = useState('')
   const [loading, setLoading] = useState(false)
 
   // Upload tab
@@ -111,6 +112,7 @@ export default function UploadModal({ onClose, onSuccess }) {
         caption: caption.trim() || null,
         tags: tagArr,
         source,
+        music_url: musicUrl.trim() || null,
         likes_count: 0,
         comments_count: 0
       })
@@ -255,10 +257,11 @@ export default function UploadModal({ onClose, onSuccess }) {
             </div>
           )}
 
-          {/* Caption & Tags */}
+          {/* Caption & Tags & Music */}
           <div className="space-y-3 pt-2">
             <input className="input" placeholder="Açıklama yaz..." value={caption} onChange={e => setCaption(e.target.value)} />
             <input className="input" placeholder="Tag'ler (virgülle ayır: komedi, meme, ...)" value={tags} onChange={e => setTags(e.target.value)} />
+            <input className="input" placeholder="Müzik URL'i (opsiyonel, .mp3/.ogg)" value={musicUrl} onChange={e => setMusicUrl(e.target.value)} />
           </div>
         </div>
 

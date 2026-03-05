@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { X, Send } from 'lucide-react'
+import { X, Send, Heart, CornerDownRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
@@ -10,6 +10,10 @@ export default function CommentModal({ post, onClose }) {
   const [text, setText] = useState('')
   const [loading, setLoading] = useState(false)
   const [count, setCount] = useState(post.comments_count || 0)
+  const [replyTo, setReplyTo] = useState(null) // { id, username }
+  const [replyText, setReplyText] = useState('')
+  const [replyLoading, setReplyLoading] = useState(false)
+  const [myLikes, setMyLikes] = useState(new Set())
 
   useEffect(() => {
     loadComments()
@@ -23,9 +27,17 @@ export default function CommentModal({ post, onClose }) {
       .select('*, profiles!fk_comments_profiles(username, display_name, avatar_url)')
       .eq('post_id', post.id)
       .order('created_at', { ascending: true })
-    setComments(data || [])
-    setCount(data?.length || 0)
-    return data?.length || 0
+    const all = data || []
+    setComments(all)
+    setCount(all.filter(c => !c.parent_id).length + all.filter(c => c.parent_id).length)
+
+    // kendi beğenilerimi yükle
+    if (user && all.length > 0) {
+      const ids = all.map(c => c.id)
+      const { data: lk } = await supabase.from('comment_likes').select('comment_id').eq('user_id', user.id).in('comment_id', ids)
+      setMyLikes(new Set((lk || []).map(l => l.comment_id)))
+    }
+    return all.length
   }
 
   async function submit(e) {
@@ -48,6 +60,90 @@ export default function CommentModal({ post, onClose }) {
     setLoading(false)
   }
 
+  async function submitReply(e) {
+    e.preventDefault()
+    if (!user || !replyTo || !replyText.trim()) return
+    setReplyLoading(true)
+    const { error } = await supabase.from('comments').insert({
+      user_id: user.id, post_id: post.id, text: replyText.trim(), parent_id: replyTo.id
+    })
+    if (!error) {
+      setReplyTo(null)
+      setReplyText('')
+      await loadComments()
+    }
+    setReplyLoading(false)
+  }
+
+  async function toggleCommentLike(commentId) {
+    if (!user) { toast.error('Giriş yapman lazım'); return }
+    const isLiked = myLikes.has(commentId)
+    if (isLiked) {
+      await supabase.from('comment_likes').delete().eq('user_id', user.id).eq('comment_id', commentId)
+      setMyLikes(s => { const n = new Set(s); n.delete(commentId); return n })
+      setComments(cs => cs.map(c => c.id === commentId ? { ...c, likes_count: Math.max(0, (c.likes_count || 0) - 1) } : c))
+    } else {
+      const { error } = await supabase.from('comment_likes').insert({ user_id: user.id, comment_id: commentId })
+      if (!error) {
+        setMyLikes(s => new Set([...s, commentId]))
+        setComments(cs => cs.map(c => c.id === commentId ? { ...c, likes_count: (c.likes_count || 0) + 1 } : c))
+      }
+    }
+  }
+
+  const topComments = comments.filter(c => !c.parent_id)
+  const getReplies = (parentId) => comments.filter(c => c.parent_id === parentId)
+
+  function CommentItem({ c, isReply }) {
+    return (
+      <div className={`flex gap-3 ${isReply ? 'ml-10 mt-1.5' : ''}`}>
+        <div className="w-7 h-7 rounded-full bg-brand-800 flex-shrink-0 flex items-center justify-center text-xs font-bold text-brand-200 overflow-hidden">
+          {c.profiles?.avatar_url
+            ? <img src={c.profiles.avatar_url} alt="" className="w-full h-full object-cover" />
+            : c.profiles?.username?.[0]?.toUpperCase()}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm">
+            <span className="font-semibold text-brand-400">{c.profiles?.display_name || c.profiles?.username}</span>
+            {' '}<span className="text-gray-300">{c.text}</span>
+          </p>
+          <div className="flex items-center gap-3 mt-0.5">
+            <p className="text-xs text-gray-600">{new Date(c.created_at).toLocaleString('tr-TR')}</p>
+            <button
+              onClick={() => toggleCommentLike(c.id)}
+              className={`flex items-center gap-1 text-xs transition-colors ${myLikes.has(c.id) ? 'text-red-400' : 'text-gray-600 hover:text-red-400'}`}>
+              <Heart className={`w-3 h-3 ${myLikes.has(c.id) ? 'fill-current' : ''}`} />
+              {c.likes_count > 0 && c.likes_count}
+            </button>
+            {!isReply && user && (
+              <button
+                onClick={() => setReplyTo(r => r?.id === c.id ? null : { id: c.id, username: c.profiles?.username })}
+                className="text-xs text-gray-600 hover:text-brand-400 transition-colors flex items-center gap-1">
+                <CornerDownRight className="w-3 h-3" /> Yanıtla
+              </button>
+            )}
+          </div>
+          {/* Reply input */}
+          {replyTo?.id === c.id && (
+            <form onSubmit={submitReply} className="flex gap-2 mt-2">
+              <input
+                className="input flex-1 text-xs py-1.5"
+                placeholder={`@${replyTo.username} yanıtla...`}
+                value={replyText}
+                onChange={e => setReplyText(e.target.value)}
+                disabled={replyLoading}
+                autoFocus
+              />
+              <button type="submit" disabled={replyLoading || !replyText.trim()} className="btn-primary px-2 py-1">
+                <Send className="w-3 h-3" />
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
       onClick={() => onClose(count)}>
@@ -61,21 +157,13 @@ export default function CommentModal({ post, onClose }) {
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-          {comments.length === 0 && <p className="text-gray-500 text-center py-8 text-sm">İlk yorumu sen yap!</p>}
-          {comments.map(c => (
-            <div key={c.id} className="flex gap-3">
-              <div className="w-8 h-8 rounded-full bg-brand-800 flex-shrink-0 flex items-center justify-center text-xs font-bold text-brand-200 overflow-hidden">
-                {c.profiles?.avatar_url
-                  ? <img src={c.profiles.avatar_url} alt="" className="w-full h-full object-cover" />
-                  : c.profiles?.username?.[0]?.toUpperCase()}
-              </div>
-              <div>
-                <p className="text-sm">
-                  <span className="font-semibold text-brand-400">{c.profiles?.display_name || c.profiles?.username}</span>
-                  {' '}<span className="text-gray-300">{c.text}</span>
-                </p>
-                <p className="text-xs text-gray-600 mt-0.5">{new Date(c.created_at).toLocaleString('tr-TR')}</p>
-              </div>
+          {topComments.length === 0 && <p className="text-gray-500 text-center py-8 text-sm">İlk yorumu sen yap!</p>}
+          {topComments.map(c => (
+            <div key={c.id}>
+              <CommentItem c={c} isReply={false} />
+              {getReplies(c.id).map(r => (
+                <CommentItem key={r.id} c={r} isReply={true} />
+              ))}
             </div>
           ))}
         </div>

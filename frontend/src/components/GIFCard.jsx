@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Heart, MessageCircle, Share2, Repeat2, MoreHorizontal, Pencil, Check, X, Loader2, Trash2 } from 'lucide-react'
+import { Heart, MessageCircle, Share2, Repeat2, MoreHorizontal, Pencil, Check, X, Loader2, Trash2, BadgeCheck } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
@@ -111,7 +111,10 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
               }
             </div>
             <div>
-              <p className="font-semibold text-sm text-white">{displayName}</p>
+              <p className="font-semibold text-sm text-white flex items-center gap-1">
+                {displayName}
+                {post.profiles?.is_verified && <BadgeCheck className="w-4 h-4 text-blue-400 flex-shrink-0" />}
+              </p>
               <p className="text-xs text-gray-500">@{username} · {formatTime(post.created_at)}</p>
             </div>
           </Link>
@@ -199,6 +202,13 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
             </div>
           )}
         </div>
+
+        {/* Music Player */}
+        {currentPost.music_url && (
+          <div className="px-4 pb-2">
+            <audio controls src={currentPost.music_url} className="w-full h-8" style={{ colorScheme: 'dark' }} />
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex items-center gap-1 px-3 py-3">

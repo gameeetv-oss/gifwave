@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { Home, Compass, Upload, Bell, User, LogOut, Waves } from 'lucide-react'
+import { Home, Compass, Upload, Bell, User, LogOut, Waves, MessageSquare } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 
@@ -9,6 +9,7 @@ export default function Navbar() {
   const location = useLocation()
   const navigate = useNavigate()
   const [unread, setUnread] = useState(0)
+  const [unreadDMs, setUnreadDMs] = useState(0)
 
   // Her zaman kendi profilimizin linkini oluştur
   const myProfileLink = profile?.username
@@ -26,12 +27,23 @@ export default function Navbar() {
       .eq('read', false)
       .then(({ count }) => setUnread(count || 0))
 
+    supabase
+      .from('messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('receiver_id', user.id)
+      .eq('read', false)
+      .then(({ count }) => setUnreadDMs(count || 0))
+
     const channel = supabase
       .channel('notif-count-' + user.id)
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'notifications',
         filter: `user_id=eq.${user.id}`
       }, () => setUnread(n => n + 1))
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'messages',
+        filter: `receiver_id=eq.${user.id}`
+      }, () => setUnreadDMs(n => n + 1))
       .subscribe()
     return () => supabase.removeChannel(channel)
   }, [user])
@@ -41,6 +53,7 @@ export default function Navbar() {
     { to: '/explore', icon: Compass, label: 'Keşfet' },
     ...(user ? [
       { to: '/upload', icon: Upload, label: 'Yükle' },
+      { to: '/messages', icon: MessageSquare, label: 'Mesajlar', badge: unreadDMs },
       { to: '/notifications', icon: Bell, label: 'Bildirimler', badge: unread },
       { to: myProfileLink, icon: User, label: 'Profil', exact: true },
     ] : []),
