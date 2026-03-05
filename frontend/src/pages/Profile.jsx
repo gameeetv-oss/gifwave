@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import GIFCard from '../components/GIFCard'
 import FollowModal from '../components/FollowModal'
+import { useBlock } from '../context/BlockContext'
 import toast from 'react-hot-toast'
 
 const TABS = [
@@ -38,6 +39,7 @@ export default function Profile() {
   const [showMenu, setShowMenu]     = useState(false)
 
   const isMe = user && (myProfile?.username === username || user.id === username)
+  const { blockedIds, allBlockedIds, loadBlocks } = useBlock()
 
   useEffect(() => { loadProfile() }, [username])
 
@@ -85,8 +87,11 @@ export default function Profile() {
       setPosts(rawPosts)
     }
 
-    setReposts((repostsRes.data || []).map(r => r.posts).filter(Boolean).map(p => ({ ...p, _repost: true })))
-    setLiked((likedRes.data || []).map(l => ({ ...l.posts, _liked: true, user_liked: true })).filter(p => p?.id))
+    setReposts((repostsRes.data || []).map(r => r.posts).filter(Boolean)
+      .filter(p => !allBlockedIds.has(p.user_id))
+      .map(p => ({ ...p, _repost: true })))
+    setLiked((likedRes.data || []).map(l => ({ ...l.posts, _liked: true, user_liked: true }))
+      .filter(p => p?.id && !allBlockedIds.has(p.user_id)))
 
     if (user && !isMe) {
       const [followRes, blockRes] = await Promise.all([
@@ -143,14 +148,15 @@ export default function Profile() {
     if (isBlocked) {
       await supabase.from('blocks').delete().eq('blocker_id', user.id).eq('blocked_id', profile.id)
       setIsBlocked(false)
+      loadBlocks()
       toast('Engel kaldırıldı')
     } else {
       await supabase.from('blocks').insert({ blocker_id: user.id, blocked_id: profile.id })
-      // Varsa takibi de kaldır
       await supabase.from('follows').delete()
         .or(`and(follower_id.eq.${user.id},following_id.eq.${profile.id}),and(follower_id.eq.${profile.id},following_id.eq.${user.id})`)
       setIsBlocked(true)
       setFollowStatus(null)
+      loadBlocks()
       toast.success('Kullanıcı engellendi')
     }
   }
@@ -210,6 +216,27 @@ export default function Profile() {
   if (!profile) return (
     <div className="text-center py-20 text-gray-500"><p className="text-4xl mb-2">😕</p><p>Kullanıcı bulunamadı</p></div>
   )
+
+  // Engelleme ekranı
+  if (!isMe && profile && allBlockedIds.has(profile.id)) {
+    const iBlockedThem = blockedIds.has(profile.id)
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-20 text-center text-gray-500">
+        <Shield className="w-14 h-14 mx-auto mb-4 text-gray-600" />
+        <p className="text-lg font-semibold text-gray-300 mb-2">
+          {iBlockedThem ? 'Bu kullanıcıyı engellediniz' : 'Bu içeriği görüntüleyemezsiniz'}
+        </p>
+        <p className="text-sm text-gray-600 mb-6">
+          {iBlockedThem
+            ? 'Engeli kaldırana kadar profil ve gönderiler gizlenir.'
+            : 'Bu kullanıcı sizi engelledi.'}
+        </p>
+        {iBlockedThem && (
+          <button onClick={toggleBlock} className="btn-ghost text-sm">Engeli Kaldır</button>
+        )}
+      </div>
+    )
+  }
 
   // Follow butonu metni
   const followBtnLabel = followStatus === 'accepted'

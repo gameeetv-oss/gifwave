@@ -3,11 +3,13 @@ import { useInView } from 'react-intersection-observer'
 import GIFCard from './GIFCard'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import { useBlock } from '../context/BlockContext'
 
 const PAGE_SIZE = 10
 
 export default function Feed({ mode = 'all' }) {
   const { user } = useAuth()
+  const { allBlockedIds } = useBlock()
   const [posts, setPosts] = useState([])
   const [hasMore, setHasMore] = useState(true)
   const [loading, setLoading] = useState(false)
@@ -53,6 +55,9 @@ export default function Feed({ mode = 'all' }) {
         const repostedIds = new Set(repostRes.data?.map(r => r.post_id))
         data = data.map(p => ({ ...p, user_liked: likedIds.has(p.id), user_reposted: repostedIds.has(p.id) }))
       }
+
+      // Engellenen kullanıcıların postlarını filtrele
+      if (allBlockedIds.size > 0) data = data.filter(p => !allBlockedIds.has(p.user_id))
 
       setPosts(prev => reset ? data : [...prev, ...data])
       setHasMore(data.length === PAGE_SIZE)

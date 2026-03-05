@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { usePresence } from '../context/PresenceContext'
+import { useBlock } from '../context/BlockContext'
 import { Send, Loader2, ArrowLeft, Eye, EyeOff } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -18,6 +19,7 @@ export default function Messages() {
   const { userId } = useParams()
   const { user } = useAuth()
   const { onlineUsers } = usePresence()
+  const { blockedIds, blockedByIds, allBlockedIds } = useBlock()
   const navigate = useNavigate()
 
   const [conversations, setConversations] = useState([])
@@ -166,6 +168,8 @@ export default function Messages() {
   }
 
   const isPartnerOnline = activeConv ? onlineUsers.has(activeConv.profile.id) : false
+  const isConvBlocked = activeConv ? allBlockedIds.has(activeConv.profile.id) : false
+  const iBlockedThem = activeConv ? blockedIds.has(activeConv.profile.id) : false
 
   if (!user) return <div className="flex justify-center py-20 text-gray-500">Giriş yapman lazım.</div>
 
@@ -294,19 +298,27 @@ export default function Messages() {
               <div ref={bottomRef} />
             </div>
 
-            {/* Input */}
-            <form onSubmit={sendMessage} className="px-4 py-3 border-t border-[#2a2a3f] flex gap-2">
-              <input
-                className="input flex-1 text-sm py-2"
-                placeholder="Mesaj yaz..."
-                value={text}
-                onChange={e => setText(e.target.value)}
-                disabled={sending}
-              />
-              <button type="submit" disabled={sending || !text.trim()} className="btn-primary px-3 py-2">
-                {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-              </button>
-            </form>
+            {/* Input veya engel uyarısı */}
+            {isConvBlocked ? (
+              <div className="px-4 py-4 border-t border-[#2a2a3f] text-center text-sm text-gray-500">
+                {iBlockedThem
+                  ? <span>Bu kullanıcıyı engellediniz. Mesaj gönderemezsiniz.</span>
+                  : <span>Bu kullanıcı tarafından engellendiniz.</span>}
+              </div>
+            ) : (
+              <form onSubmit={sendMessage} className="px-4 py-3 border-t border-[#2a2a3f] flex gap-2">
+                <input
+                  className="input flex-1 text-sm py-2"
+                  placeholder="Mesaj yaz..."
+                  value={text}
+                  onChange={e => setText(e.target.value)}
+                  disabled={sending}
+                />
+                <button type="submit" disabled={sending || !text.trim()} className="btn-primary px-3 py-2">
+                  {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                </button>
+              </form>
+            )}
           </div>
         ) : (
           <div className="flex-1 hidden md:flex items-center justify-center text-gray-500 flex-col gap-2">

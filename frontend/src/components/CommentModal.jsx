@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react'
 import { X, Send, Heart, CornerDownRight, BadgeCheck } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import { useBlock } from '../context/BlockContext'
 import toast from 'react-hot-toast'
 
 export default function CommentModal({ post, onClose }) {
   const { user } = useAuth()
+  const { allBlockedIds } = useBlock()
   const [comments, setComments] = useState([])
   const [text, setText] = useState('')
   const [loading, setLoading] = useState(false)
@@ -91,8 +93,9 @@ export default function CommentModal({ post, onClose }) {
     }
   }
 
-  const topComments = comments.filter(c => !c.parent_id)
-  const getReplies = (parentId) => comments.filter(c => c.parent_id === parentId)
+  const visible = comments.filter(c => !allBlockedIds.has(c.user_id))
+  const topComments = visible.filter(c => !c.parent_id)
+  const getReplies = (parentId) => visible.filter(c => c.parent_id === parentId)
 
   function CommentItem({ c, isReply }) {
     return (

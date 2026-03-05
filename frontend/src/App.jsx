@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { PresenceProvider } from './context/PresenceContext'
+import { BlockProvider } from './context/BlockContext'
 import Navbar from './components/Navbar'
 import Home from './pages/Home'
 import Explore from './pages/Explore'
@@ -43,7 +44,9 @@ export default function App() {
   return (
     <AuthProvider>
       <PresenceProvider>
-        <AppRoutes />
+        <BlockProvider>
+          <AppRoutes />
+        </BlockProvider>
       </PresenceProvider>
     </AuthProvider>
   )
