@@ -2,34 +2,40 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
-import { Camera, Loader2, UserPlus, UserMinus, Heart, Repeat2, Grid3x3, Pencil, Trash2, Check, X, BadgeCheck, MessageSquare } from 'lucide-react'
+import {
+  Camera, Loader2, UserPlus, UserMinus, Heart, Repeat2, Grid3x3,
+  Pencil, Trash2, Check, X, BadgeCheck, MessageSquare, Clock, ShieldOff, Shield, MoreHorizontal
+} from 'lucide-react'
 import GIFCard from '../components/GIFCard'
 import FollowModal from '../components/FollowModal'
 import toast from 'react-hot-toast'
 
 const TABS = [
-  { id: 'posts', label: 'Gönderiler', icon: Grid3x3 },
-  { id: 'reposts', label: 'Reposts', icon: Repeat2 },
-  { id: 'liked', label: 'Beğendikleri', icon: Heart },
+  { id: 'posts',   label: 'Gönderiler', icon: Grid3x3 },
+  { id: 'reposts', label: 'Reposts',    icon: Repeat2 },
+  { id: 'liked',   label: 'Beğendikleri', icon: Heart },
 ]
 
 export default function Profile() {
   const { username } = useParams()
   const navigate = useNavigate()
   const { user, profile: myProfile, fetchProfile } = useAuth()
-  const [profile, setProfile] = useState(null)
-  const [tab, setTab] = useState('posts')
-  const [posts, setPosts] = useState([])
-  const [reposts, setReposts] = useState([])
-  const [liked, setLiked] = useState([])
-  const [isFollowing, setIsFollowing] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [editMode, setEditMode] = useState(false)
-  const [editData, setEditData] = useState({ display_name: '', bio: '', username: '' })
-  const [saving, setSaving] = useState(false)
-  const [followModal, setFollowModal] = useState(null) // 'followers' | 'following' | null
-  const [settings, setSettings] = useState(null)
+
+  const [profile, setProfile]       = useState(null)
+  const [tab, setTab]               = useState('posts')
+  const [posts, setPosts]           = useState([])
+  const [reposts, setReposts]       = useState([])
+  const [liked, setLiked]           = useState([])
+  const [followStatus, setFollowStatus] = useState(null) // null | 'pending' | 'accepted'
+  const [isBlocked, setIsBlocked]   = useState(false)
+  const [loading, setLoading]       = useState(true)
+  const [editMode, setEditMode]     = useState(false)
+  const [editData, setEditData]     = useState({ display_name: '', bio: '', username: '' })
+  const [saving, setSaving]         = useState(false)
+  const [followModal, setFollowModal] = useState(null)
+  const [settings, setSettings]     = useState(null)
   const [editSettings, setEditSettings] = useState(null)
+  const [showMenu, setShowMenu]     = useState(false)
 
   const isMe = user && (myProfile?.username === username || user.id === username)
 
@@ -56,21 +62,16 @@ export default function Profile() {
     const [postsRes, repostsRes, likedRes] = await Promise.all([
       supabase.from('posts')
         .select('*, profiles!fk_posts_profiles(username, display_name, avatar_url, is_verified)')
-        .eq('user_id', prof.id)
-        .order('created_at', { ascending: false }),
+        .eq('user_id', prof.id).order('created_at', { ascending: false }),
       supabase.from('reposts')
         .select('post_id, created_at, posts(*, profiles!fk_posts_profiles(username, display_name, avatar_url, is_verified))')
-        .eq('user_id', prof.id)
-        .order('created_at', { ascending: false }),
+        .eq('user_id', prof.id).order('created_at', { ascending: false }),
       supabase.from('likes')
         .select('post_id, created_at, posts(*, profiles!fk_posts_profiles(username, display_name, avatar_url, is_verified))')
-        .eq('user_id', prof.id)
-        .order('created_at', { ascending: false }),
+        .eq('user_id', prof.id).order('created_at', { ascending: false }),
     ])
 
     const rawPosts = postsRes.data || []
-
-    // Kendi postlarında user_liked durumunu da yükle
     if (user && rawPosts.length > 0) {
       const postIds = rawPosts.map(p => p.id)
       const [likeRes2, repostRes2] = await Promise.all([
@@ -88,14 +89,18 @@ export default function Profile() {
     setLiked((likedRes.data || []).map(l => ({ ...l.posts, _liked: true, user_liked: true })).filter(p => p?.id))
 
     if (user && !isMe) {
-      const { data } = await supabase.from('follows')
-        .select('follower_id').eq('follower_id', user.id).eq('following_id', prof.id).maybeSingle()
-      setIsFollowing(!!data)
+      const [followRes, blockRes] = await Promise.all([
+        supabase.from('follows').select('status')
+          .eq('follower_id', user.id).eq('following_id', prof.id).maybeSingle(),
+        supabase.from('blocks').select('blocker_id')
+          .eq('blocker_id', user.id).eq('blocked_id', prof.id).maybeSingle(),
+      ])
+      setFollowStatus(followRes.data?.status || null)
+      setIsBlocked(!!blockRes.data)
     }
 
-    // user_settings yükle
     const { data: settData } = await supabase.from('user_settings').select('*').eq('user_id', prof.id).maybeSingle()
-    const defaultSett = { is_private: false, who_can_comment: 'all', who_can_reply: 'all', show_liked_posts: true, allow_dm: true }
+    const defaultSett = { is_private: false, who_can_comment: 'all', who_can_reply: 'all', show_liked_posts: true, allow_dm: true, show_read_receipts: true }
     setSettings(settData || defaultSett)
     if (isMe) setEditSettings(settData || defaultSett)
 
@@ -104,60 +109,78 @@ export default function Profile() {
 
   async function toggleFollow() {
     if (!user) { toast.error('Giriş yap'); return }
-    if (isFollowing) {
+    if (followStatus === 'accepted') {
+      // Takipten çık
       await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', profile.id)
-      setIsFollowing(false)
+      setFollowStatus(null)
       setProfile(p => ({ ...p, followers_count: Math.max(0, (p.followers_count || 1) - 1) }))
-      const [{ count: nf }, { count: nfing }] = await Promise.all([
-        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', profile.id),
-        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', user.id),
-      ])
-      await Promise.all([
-        supabase.from('profiles').update({ followers_count: nf || 0 }).eq('id', profile.id),
-        supabase.from('profiles').update({ following_count: nfing || 0 }).eq('id', user.id),
-      ])
+    } else if (followStatus === 'pending') {
+      // İsteği geri çek
+      await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', profile.id)
+      setFollowStatus(null)
+      toast('Takip isteği geri alındı')
     } else {
-      const { error } = await supabase.from('follows').insert({ follower_id: user.id, following_id: profile.id })
+      // Takip et
+      const isPrivate = settings?.is_private
+      const status = isPrivate ? 'pending' : 'accepted'
+      const { error } = await supabase.from('follows').insert({ follower_id: user.id, following_id: profile.id, status })
       if (error) { toast.error('Takip hatası'); return }
-      setIsFollowing(true)
-      setProfile(p => ({ ...p, followers_count: (p.followers_count || 0) + 1 }))
-      const [{ count: nf }, { count: nfing }] = await Promise.all([
-        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', profile.id),
-        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', user.id),
-      ])
-      await Promise.all([
-        supabase.from('profiles').update({ followers_count: nf || 0 }).eq('id', profile.id),
-        supabase.from('profiles').update({ following_count: nfing || 0 }).eq('id', user.id),
-      ])
-      await supabase.from('notifications').insert({ user_id: profile.id, type: 'follow', from_user_id: user.id })
+      setFollowStatus(status)
+      if (status === 'accepted') {
+        setProfile(p => ({ ...p, followers_count: (p.followers_count || 0) + 1 }))
+        await supabase.from('notifications').insert({ user_id: profile.id, type: 'follow', from_user_id: user.id })
+      } else {
+        await supabase.from('notifications').insert({ user_id: profile.id, type: 'follow_request', from_user_id: user.id })
+        toast('Takip isteği gönderildi')
+      }
     }
     fetchProfile(user.id)
+  }
+
+  async function toggleBlock() {
+    if (!user) return
+    setShowMenu(false)
+    if (isBlocked) {
+      await supabase.from('blocks').delete().eq('blocker_id', user.id).eq('blocked_id', profile.id)
+      setIsBlocked(false)
+      toast('Engel kaldırıldı')
+    } else {
+      await supabase.from('blocks').insert({ blocker_id: user.id, blocked_id: profile.id })
+      // Varsa takibi de kaldır
+      await supabase.from('follows').delete()
+        .or(`and(follower_id.eq.${user.id},following_id.eq.${profile.id}),and(follower_id.eq.${profile.id},following_id.eq.${user.id})`)
+      setIsBlocked(true)
+      setFollowStatus(null)
+      toast.success('Kullanıcı engellendi')
+    }
   }
 
   async function saveProfile() {
     setSaving(true)
     const newUsername = editData.username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '')
-
-    // Kullanıcı adı değiştiyse benzersizlik kontrolü
     if (newUsername !== profile.username) {
       if (newUsername.length < 3) { toast.error('Kullanıcı adı en az 3 karakter'); setSaving(false); return }
       const { data: existing } = await supabase.from('profiles').select('id').eq('username', newUsername).maybeSingle()
       if (existing) { toast.error('Bu kullanıcı adı alınmış'); setSaving(false); return }
     }
-
     const { error } = await supabase.from('profiles')
       .update({ bio: editData.bio.trim(), display_name: editData.display_name.trim(), username: newUsername })
       .eq('id', user.id)
-
     if (!error) {
       toast.success('Profil güncellendi')
       setEditMode(false)
       setProfile(p => ({ ...p, ...editData, username: newUsername }))
       fetchProfile(user.id)
-      // Username değiştiyse URL'i güncelle
       if (newUsername !== username) navigate(`/profile/${newUsername}`, { replace: true })
     } else toast.error('Hata: ' + error.message)
     setSaving(false)
+  }
+
+  async function saveSettings() {
+    if (!editSettings) return
+    const { error } = await supabase.from('user_settings').upsert({ user_id: user.id, ...editSettings })
+    if (!error) { setSettings(editSettings); toast.success('Ayarlar kaydedildi') }
+    else toast.error('Ayar kaydı hatası')
   }
 
   async function uploadAvatar(e) {
@@ -174,13 +197,6 @@ export default function Profile() {
     fetchProfile(user.id)
   }
 
-  async function saveSettings() {
-    if (!editSettings) return
-    const { error } = await supabase.from('user_settings').upsert({ user_id: user.id, ...editSettings })
-    if (!error) { setSettings(editSettings); toast.success('Ayarlar kaydedildi') }
-    else toast.error('Ayar kaydı hatası')
-  }
-
   async function deletePost(postId) {
     if (!window.confirm('Bu gönderiyi silmek istiyor musun?')) return
     const { error } = await supabase.from('posts').delete().eq('id', postId).eq('user_id', user.id)
@@ -195,8 +211,21 @@ export default function Profile() {
     <div className="text-center py-20 text-gray-500"><p className="text-4xl mb-2">😕</p><p>Kullanıcı bulunamadı</p></div>
   )
 
+  // Follow butonu metni
+  const followBtnLabel = followStatus === 'accepted'
+    ? <><UserMinus className="w-4 h-4" />Takibi Bırak</>
+    : followStatus === 'pending'
+    ? <><Clock className="w-4 h-4" />İstek Gönderildi</>
+    : <><UserPlus className="w-4 h-4" />Takip Et</>
+
+  const followBtnClass = followStatus === 'accepted'
+    ? 'bg-white/10 hover:bg-red-500/10 hover:text-red-400 text-gray-300'
+    : followStatus === 'pending'
+    ? 'bg-yellow-500/10 text-yellow-400'
+    : 'btn-primary'
+
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8">
+    <div className="max-w-2xl mx-auto px-4 py-8" onClick={() => showMenu && setShowMenu(false)}>
       <div className="card p-6 mb-6">
         <div className="flex items-start gap-5">
           {/* Avatar */}
@@ -229,23 +258,27 @@ export default function Profile() {
                     </div>
                     <textarea className="input text-sm resize-none" rows={2} placeholder="Biyografi..."
                       value={editData.bio} onChange={e => setEditData(d => ({ ...d, bio: e.target.value }))} />
+
                     {/* Gizlilik Ayarları */}
                     {editSettings && (
                       <div className="border border-[#2a2a3f] rounded-xl p-3 space-y-2">
                         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Gizlilik</p>
                         {[
-                          { key: 'is_private', label: 'Gizli hesap' },
-                          { key: 'show_liked_posts', label: 'Beğendiklerimi göster' },
-                          { key: 'allow_dm', label: 'Mesaj almaya izin ver' },
+                          { key: 'is_private',          label: 'Gizli hesap (takip isteği gönderilir)' },
+                          { key: 'show_liked_posts',    label: 'Beğendiklerimi göster' },
+                          { key: 'allow_dm',            label: 'Mesaj almaya izin ver' },
+                          { key: 'show_read_receipts',  label: 'Okundu bilgisi gönder' },
                         ].map(({ key, label }) => (
-                          <label key={key} className="flex items-center justify-between text-sm text-gray-300 cursor-pointer">
-                            <span>{label}</span>
-                            <input type="checkbox" checked={!!editSettings[key]} onChange={e => setEditSettings(s => ({ ...s, [key]: e.target.checked }))} className="ml-2" />
+                          <label key={key} className="flex items-center justify-between text-sm text-gray-300 cursor-pointer select-none">
+                            <span className="text-xs">{label}</span>
+                            <input type="checkbox" checked={!!editSettings[key]} className="ml-2 accent-brand-500"
+                              onChange={e => setEditSettings(s => ({ ...s, [key]: e.target.checked }))} />
                           </label>
                         ))}
                         <button onClick={saveSettings} className="btn-ghost text-xs px-2 py-1 mt-1">Ayarları Kaydet</button>
                       </div>
                     )}
+
                     <div className="flex gap-2">
                       <button onClick={saveProfile} disabled={saving}
                         className="btn-primary text-sm px-3 py-1.5 flex items-center gap-1">
@@ -258,11 +291,10 @@ export default function Profile() {
                   </div>
                 ) : (
                   <>
-                    <h1 className="font-bold text-xl flex items-center gap-1.5">
+                    <h1 className="font-bold text-xl flex items-center gap-1.5 flex-wrap">
                       {profile.display_name || profile.username}
-                      {profile.is_verified && (
-                        <BadgeCheck className="w-5 h-5 text-blue-400" />
-                      )}
+                      {profile.is_verified && <BadgeCheck className="w-5 h-5 text-blue-400 flex-shrink-0" />}
+                      {settings?.is_private && <span className="text-xs text-gray-500 bg-white/5 px-2 py-0.5 rounded-full">Gizli</span>}
                     </h1>
                     <p className="text-gray-500 text-sm">@{profile.username}</p>
                     {profile.bio
@@ -280,19 +312,35 @@ export default function Profile() {
                     <Pencil className="w-3.5 h-3.5" /> Düzenle
                   </button>
                 ) : user && (
-                  <div className="flex gap-2 flex-shrink-0">
+                  <div className="flex gap-2 flex-shrink-0 items-center">
                     <button onClick={toggleFollow}
-                      className={`flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl font-medium transition-all ${
-                        isFollowing ? 'bg-white/10 hover:bg-red-500/10 hover:text-red-400 text-gray-300' : 'btn-primary'
-                      }`}>
-                      {isFollowing ? <><UserMinus className="w-4 h-4" />Takibi Bırak</> : <><UserPlus className="w-4 h-4" />Takip Et</>}
+                      className={`flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl font-medium transition-all ${followBtnClass}`}>
+                      {followBtnLabel}
                     </button>
                     {settings?.allow_dm !== false && (
                       <Link to={`/messages/${profile.id}`}
                         className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl font-medium bg-white/10 hover:bg-brand-500/20 hover:text-brand-400 text-gray-300 transition-all">
-                        <MessageSquare className="w-4 h-4" /> Mesaj
+                        <MessageSquare className="w-4 h-4" />
                       </Link>
                     )}
+                    {/* 3 nokta menüsü */}
+                    <div className="relative">
+                      <button onClick={e => { e.stopPropagation(); setShowMenu(m => !m) }}
+                        className="text-gray-500 hover:text-white p-2 rounded-xl hover:bg-white/5 transition-all">
+                        <MoreHorizontal className="w-4 h-4" />
+                      </button>
+                      {showMenu && (
+                        <div className="absolute right-0 top-9 bg-[#1a1a2e] border border-[#3a3a5c] rounded-xl shadow-xl z-20 min-w-[160px] py-1"
+                          onClick={e => e.stopPropagation()}>
+                          <button onClick={toggleBlock}
+                            className={`w-full flex items-center gap-2 px-4 py-2 text-sm transition-colors ${
+                              isBlocked ? 'text-gray-300 hover:bg-white/5' : 'text-red-400 hover:bg-red-500/10'
+                            }`}>
+                            {isBlocked ? <><ShieldOff className="w-4 h-4" /> Engeli Kaldır</> : <><Shield className="w-4 h-4" /> Engelle</>}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )
               )}
@@ -341,23 +389,16 @@ export default function Profile() {
         <div className="space-y-4">
           {currentItems.map(post => (
             <div key={post.id + (post._repost ? '_r' : post._liked ? '_l' : '')} className="relative">
-              <GIFCard
-                post={post}
-                showRepostBadge={!!post._repost}
-                onDelete={isMe && tab === 'posts' ? deletePost : undefined}
-              />
+              <GIFCard post={post} showRepostBadge={!!post._repost}
+                onDelete={isMe && tab === 'posts' ? deletePost : undefined} />
             </div>
           ))}
         </div>
       )}
 
       {followModal && (
-        <FollowModal
-          profileId={profile.id}
-          type={followModal}
-          onClose={() => setFollowModal(null)}
-          onCountChange={loadProfile}
-        />
+        <FollowModal profileId={profile.id} type={followModal}
+          onClose={() => setFollowModal(null)} onCountChange={loadProfile} />
       )}
     </div>
   )

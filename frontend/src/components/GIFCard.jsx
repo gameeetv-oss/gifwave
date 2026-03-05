@@ -50,6 +50,9 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
     if (newReposted) {
       const { error } = await supabase.from('reposts').insert({ user_id: user.id, post_id: post.id })
       if (error) { setReposted(false); setRepostCount(n => Math.max(0, n - 1)); return }
+      if (post.user_id !== user.id) {
+        supabase.from('notifications').insert({ user_id: post.user_id, type: 'repost', from_user_id: user.id, post_id: post.id })
+      }
       toast.success('Repost yapıldı!')
     } else {
       await supabase.from('reposts').delete().eq('user_id', user.id).eq('post_id', post.id)
