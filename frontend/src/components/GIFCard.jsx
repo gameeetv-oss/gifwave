@@ -12,6 +12,7 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
   const [likeCount, setLikeCount] = useState(post.likes_count || 0)
   const [commentCount, setCommentCount] = useState(post.comments_count || 0)
   const [reposted, setReposted] = useState(post.user_reposted || false)
+  const [repostCount, setRepostCount] = useState(post.reposts_count || 0)
   const [showComments, setShowComments] = useState(false)
   const [imgLoaded, setImgLoaded] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
@@ -45,9 +46,10 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
     if (!user) { toast.error('Repost için giriş yap'); return }
     const newReposted = !reposted
     setReposted(newReposted)
+    setRepostCount(n => newReposted ? n + 1 : Math.max(0, n - 1))
     if (newReposted) {
       const { error } = await supabase.from('reposts').insert({ user_id: user.id, post_id: post.id })
-      if (error) { setReposted(false); return }
+      if (error) { setReposted(false); setRepostCount(n => Math.max(0, n - 1)); return }
       toast.success('Repost yapıldı!')
     } else {
       await supabase.from('reposts').delete().eq('user_id', user.id).eq('post_id', post.id)
@@ -233,6 +235,7 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
               reposted ? 'text-green-400 bg-green-500/10' : 'text-gray-400 hover:text-green-400 hover:bg-green-500/10'
             }`}>
             <Repeat2 className="w-5 h-5" />
+            <span>{repostCount}</span>
           </button>
         </div>
       </article>
