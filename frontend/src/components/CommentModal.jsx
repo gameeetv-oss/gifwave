@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { X, Send, Heart, CornerDownRight, BadgeCheck } from 'lucide-react'
+import { X, Send, Heart, CornerDownRight, BadgeCheck, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useBlock } from '../context/BlockContext'
@@ -77,6 +77,14 @@ export default function CommentModal({ post, onClose }) {
     setReplyLoading(false)
   }
 
+  async function deleteComment(commentId) {
+    const { error } = await supabase.from('comments').delete().eq('id', commentId).eq('user_id', user.id)
+    if (!error) {
+      setComments(cs => cs.filter(c => c.id !== commentId && c.parent_id !== commentId))
+      setCount(n => Math.max(0, n - 1))
+    }
+  }
+
   async function toggleCommentLike(commentId) {
     if (!user) { toast.error('Giriş yapman lazım'); return }
     const isLiked = myLikes.has(commentId)
@@ -126,6 +134,13 @@ export default function CommentModal({ post, onClose }) {
                 onClick={() => setReplyTo(r => r?.id === c.id ? null : { id: c.id, username: c.profiles?.username })}
                 className="text-xs text-gray-600 hover:text-brand-400 transition-colors flex items-center gap-1">
                 <CornerDownRight className="w-3 h-3" /> Yanıtla
+              </button>
+            )}
+            {user?.id === c.user_id && (
+              <button
+                onClick={() => deleteComment(c.id)}
+                className="text-xs text-gray-600 hover:text-red-400 transition-colors flex items-center gap-1">
+                <Trash2 className="w-3 h-3" />
               </button>
             )}
           </div>
