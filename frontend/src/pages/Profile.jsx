@@ -276,7 +276,7 @@ export default function Profile() {
           </div>
 
           <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
               <div className="min-w-0 flex-1">
                 {editMode ? (
                   <div className="space-y-2">
@@ -328,10 +328,10 @@ export default function Profile() {
                   </div>
                 ) : (
                   <>
-                    <h1 className="font-bold text-xl flex items-center gap-1.5 flex-wrap">
-                      {profile.display_name || profile.username}
+                    <h1 className="font-bold text-xl flex items-center gap-1.5 min-w-0">
+                      <span className="truncate">{profile.display_name || profile.username}</span>
                       {profile.is_verified && <BadgeCheck className="w-5 h-5 text-blue-400 flex-shrink-0" />}
-                      {settings?.is_private && <span className="text-xs text-gray-500 bg-white/5 px-2 py-0.5 rounded-full">Gizli</span>}
+                      {settings?.is_private && <span className="text-xs text-gray-500 bg-white/5 px-2 py-0.5 rounded-full flex-shrink-0">Gizli</span>}
                     </h1>
                     <p className="text-gray-500 text-sm">@{profile.username}</p>
                     {profile.bio
@@ -349,7 +349,7 @@ export default function Profile() {
                     <Pencil className="w-3.5 h-3.5" /> Düzenle
                   </button>
                 ) : user && (
-                  <div className="flex gap-2 flex-shrink-0 items-center">
+                  <div className="flex gap-2 items-center flex-wrap">
                     <button onClick={toggleFollow}
                       className={`flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl font-medium transition-all ${followBtnClass}`}>
                       {followBtnLabel}
