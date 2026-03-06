@@ -1,6 +1,8 @@
 import os
 import subprocess
 import tempfile
+import time
+import asyncio
 import httpx
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query
@@ -114,6 +116,62 @@ async def convert_video_to_gif(file: UploadFile = File(...)):
 
     return Response(content=gif_bytes, media_type="image/gif",
                     headers={"Content-Disposition": "attachment; filename=output.gif"})
+
+
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://nwdwfwokdpjdkpsztuuo.supabase.co")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+
+
+@app.post("/music/extract")
+async def extract_music(url: str = Query(...)):
+    """YouTube URL'den sesi çıkarır, Supabase'e yükler, public URL döndürür."""
+    import yt_dlp
+
+    if not SUPABASE_SERVICE_KEY:
+        raise HTTPException(status_code=500, detail="SUPABASE_SERVICE_ROLE_KEY eksik")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        ydl_opts = {
+            "format": "bestaudio/best",
+            "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "128"}],
+            "outtmpl": os.path.join(tmpdir, "%(id)s.%(ext)s"),
+            "quiet": True,
+            "no_warnings": True,
+        }
+
+        try:
+            def download():
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    return ydl.extract_info(url, download=True)
+
+            info = await asyncio.get_event_loop().run_in_executor(None, download)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"İndirme hatası: {str(e)[:120]}")
+
+        video_id = info.get("id", "unknown")
+        title = info.get("title", "Müzik")
+
+        mp3_files = [f for f in os.listdir(tmpdir) if f.endswith(".mp3")]
+        if not mp3_files:
+            raise HTTPException(status_code=500, detail="Ses dosyası oluşturulamadı")
+
+        audio_path = os.path.join(tmpdir, mp3_files[0])
+        with open(audio_path, "rb") as f:
+            audio_data = f.read()
+
+        filename = f"music/yt_{video_id}_{int(time.time())}.mp3"
+        async with httpx.AsyncClient(timeout=60) as client:
+            res = await client.post(
+                f"{SUPABASE_URL}/storage/v1/object/gifs/{filename}",
+                headers={"Authorization": f"Bearer {SUPABASE_SERVICE_KEY}", "Content-Type": "audio/mpeg"},
+                content=audio_data,
+            )
+
+        if res.status_code not in (200, 201):
+            raise HTTPException(status_code=500, detail=f"Storage hatası: {res.text[:100]}")
+
+        public_url = f"{SUPABASE_URL}/storage/v1/object/public/gifs/{filename}"
+        return {"url": public_url, "title": title}
 
 
 if __name__ == "__main__":

@@ -14,6 +14,7 @@ export default function UploadModal({ onClose, onSuccess }) {
   const [musicUrl, setMusicUrl] = useState('')
   const [musicFileName, setMusicFileName] = useState('')
   const [musicUploading, setMusicUploading] = useState(false)
+  const [ytInput, setYtInput] = useState('')
   const musicFileRef = useRef()
   const [loading, setLoading] = useState(false)
 
@@ -74,6 +75,24 @@ export default function UploadModal({ onClose, onSuccess }) {
       toast.error(err.message)
     } finally {
       setConvertLoading(false)
+    }
+  }
+
+  async function extractYTMusic() {
+    if (!ytInput.trim()) return
+    setMusicUploading(true)
+    try {
+      const res = await fetch(`${BACKEND_URL}/music/extract?url=${encodeURIComponent(ytInput.trim())}`, { method: 'POST' })
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Hata') }
+      const { url, title } = await res.json()
+      setMusicUrl(url)
+      setMusicFileName(title)
+      setYtInput('')
+      toast.success('Müzik çıkarıldı!')
+    } catch (err) {
+      toast.error(err.message || 'Müzik çıkarılamadı')
+    } finally {
+      setMusicUploading(false)
     }
   }
 
@@ -282,7 +301,7 @@ export default function UploadModal({ onClose, onSuccess }) {
             <input className="input" placeholder="Tag'ler (virgülle ayır: komedi, meme, ...)" value={tags} onChange={e => setTags(e.target.value)} />
             <input ref={musicFileRef} type="file" accept="audio/*" className="hidden" onChange={handleMusicSelect} />
             {musicFileName ? (
-              <div className="flex items-center gap-3 bg-[#1a1a2e] border border-[#2a2a3f] rounded-xl px-3 py-2">
+              <div className="flex items-center gap-3 bg-[#1a1a2e] border border-brand-500/30 rounded-xl px-3 py-2">
                 <Music className="w-4 h-4 text-brand-400 flex-shrink-0" />
                 <p className="text-sm text-gray-300 flex-1 truncate">{musicFileName}</p>
                 <button onClick={() => { setMusicUrl(''); setMusicFileName('') }} className="text-gray-500 hover:text-red-400 transition-colors">
@@ -290,15 +309,33 @@ export default function UploadModal({ onClose, onSuccess }) {
                 </button>
               </div>
             ) : (
-              <button
-                type="button"
-                onClick={() => musicFileRef.current?.click()}
-                disabled={musicUploading}
-                className="w-full flex items-center gap-2 px-3 py-2 bg-[#1a1a2e] border border-dashed border-[#3a3a5c] rounded-xl text-sm text-gray-500 hover:border-brand-500 hover:text-brand-400 transition-colors"
-              >
-                {musicUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Music className="w-4 h-4" />}
-                {musicUploading ? 'Yükleniyor...' : 'Müzik ekle (mp3, ogg, wav) — opsiyonel'}
-              </button>
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <input
+                    className="input flex-1 text-sm"
+                    placeholder="YouTube linki yapıştır..."
+                    value={ytInput}
+                    onChange={e => setYtInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && extractYTMusic()}
+                  />
+                  <button type="button" onClick={extractYTMusic}
+                    disabled={musicUploading || !ytInput.trim()}
+                    className="btn-primary px-3 py-2 text-sm flex-shrink-0 flex items-center gap-1.5">
+                    {musicUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Music className="w-4 h-4" />}
+                    {musicUploading ? 'Çıkarılıyor...' : 'Çıkar'}
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-px bg-[#2a2a3f]" />
+                  <span className="text-xs text-gray-600">veya</span>
+                  <div className="flex-1 h-px bg-[#2a2a3f]" />
+                </div>
+                <button type="button" onClick={() => musicFileRef.current?.click()} disabled={musicUploading}
+                  className="w-full flex items-center gap-2 px-3 py-2 bg-[#1a1a2e] border border-dashed border-[#3a3a5c] rounded-xl text-sm text-gray-500 hover:border-brand-500 hover:text-brand-400 transition-colors">
+                  <Music className="w-4 h-4" />
+                  MP3 / OGG / WAV dosyası yükle
+                </button>
+              </div>
             )}
           </div>
         </div>
