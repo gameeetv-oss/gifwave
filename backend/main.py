@@ -159,10 +159,10 @@ async def extract_music(url: str = Query(...)):
         with open(audio_path, "rb") as f:
             audio_data = f.read()
 
-        filename = f"music/yt_{video_id}_{int(time.time())}.mp3"
+        filename = f"yt_{video_id}_{int(time.time())}.mp3"
         async with httpx.AsyncClient(timeout=60) as client:
             res = await client.post(
-                f"{SUPABASE_URL}/storage/v1/object/gifs/{filename}",
+                f"{SUPABASE_URL}/storage/v1/object/music/{filename}",
                 headers={"Authorization": f"Bearer {SUPABASE_SERVICE_KEY}", "Content-Type": "audio/mpeg"},
                 content=audio_data,
             )
@@ -170,7 +170,7 @@ async def extract_music(url: str = Query(...)):
         if res.status_code not in (200, 201):
             raise HTTPException(status_code=500, detail=f"Storage hatası: {res.text[:100]}")
 
-        public_url = f"{SUPABASE_URL}/storage/v1/object/public/gifs/{filename}"
+        public_url = f"{SUPABASE_URL}/storage/v1/object/public/music/{filename}"
         return {"url": public_url, "title": title}
 
 

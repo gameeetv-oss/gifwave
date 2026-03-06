@@ -102,10 +102,10 @@ export default function UploadModal({ onClose, onSuccess }) {
     if (!file.type.startsWith('audio/')) { toast.error('Ses dosyası seçmelisin (mp3, ogg, wav...)'); return }
     if (file.size > 15 * 1024 * 1024) { toast.error('Maks 15MB'); return }
     setMusicUploading(true)
-    const path = `music/${user.id}/${Date.now()}_${file.name}`
-    const { error } = await supabase.storage.from('gifs').upload(path, file, { contentType: file.type })
+    const path = `${user.id}/${Date.now()}_${file.name}`
+    const { error } = await supabase.storage.from('music').upload(path, file, { contentType: file.type })
     if (error) { toast.error('Müzik yükleme hatası'); setMusicUploading(false); return }
-    const { data: { publicUrl } } = supabase.storage.from('gifs').getPublicUrl(path)
+    const { data: { publicUrl } } = supabase.storage.from('music').getPublicUrl(path)
     setMusicUrl(publicUrl)
     setMusicFileName(file.name)
     setMusicUploading(false)
