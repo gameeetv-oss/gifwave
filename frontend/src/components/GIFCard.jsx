@@ -35,22 +35,27 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
   const [musicLoading, setMusicLoading] = useState(false)
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
 
-  // YouTube URL varsa otomatik çıkar, audio URL varsa direkt kullan
+  // YouTube URL varsa: önce stream URL ile hemen çal (~2-3sn), arka planda Supabase'e kaydet
   useEffect(() => {
     if (!currentPost.music_url) return
     const ytId = getYouTubeId(currentPost.music_url)
     if (!ytId) { setAudioSrc(currentPost.music_url); return }
+
     setMusicLoading(true)
-    fetch(`${BACKEND_URL}/music/extract?url=${encodeURIComponent(currentPost.music_url)}`, { method: 'POST' })
+    // Adım 1: Hızlı stream URL (indirme yok)
+    fetch(`${BACKEND_URL}/music/stream-url?url=${encodeURIComponent(currentPost.music_url)}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
-        if (data?.url) {
-          setAudioSrc(data.url)
-          supabase.from('posts').update({ music_url: data.url }).eq('id', currentPost.id)
-        }
+        if (!data?.url) return
+        setAudioSrc(data.url)
+        setMusicLoading(false)
+        // Adım 2: Arka planda kalıcı kayıt (DB güncelle)
+        fetch(`${BACKEND_URL}/music/extract?url=${encodeURIComponent(currentPost.music_url)}`, { method: 'POST' })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (d?.url) supabase.from('posts').update({ music_url: d.url }).eq('id', currentPost.id) })
+          .catch(() => {})
       })
-      .catch(() => {})
-      .finally(() => setMusicLoading(false))
+      .catch(() => setMusicLoading(false))
   }, [currentPost.id])
 
   useEffect(() => {

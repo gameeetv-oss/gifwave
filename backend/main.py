@@ -122,6 +122,33 @@ SUPABASE_URL = os.getenv("SUPABASE_URL", "https://nwdwfwokdpjdkpsztuuo.supabase.
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 
 
+@app.get("/music/stream-url")
+async def get_stream_url(url: str = Query(...)):
+    """Sadece stream URL'sini döndür (indirme yok, hızlı ~2-3 sn)."""
+    import yt_dlp
+
+    def extract():
+        ydl_opts = {
+            "format": "bestaudio[ext=m4a]/bestaudio/best",
+            "quiet": True,
+            "no_warnings": True,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            formats = info.get("formats", [info])
+            audio = [f for f in formats if f.get("vcodec") == "none" and f.get("acodec") != "none"]
+            if audio:
+                best = sorted(audio, key=lambda f: f.get("abr") or 0, reverse=True)[0]
+                return best["url"], info.get("title", "Müzik")
+            return info.get("url", ""), info.get("title", "Müzik")
+
+    try:
+        stream_url, title = await asyncio.get_event_loop().run_in_executor(None, extract)
+        return {"url": stream_url, "title": title}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)[:120])
+
+
 @app.post("/music/extract")
 async def extract_music(url: str = Query(...)):
     """YouTube URL'den sesi çıkarır, Supabase'e yükler, public URL döndürür."""
