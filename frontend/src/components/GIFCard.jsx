@@ -29,15 +29,16 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
   useEffect(() => { setLiked(post.user_liked || false) }, [post.user_liked])
   useEffect(() => { setReposted(post.user_reposted || false) }, [post.user_reposted])
 
-  const iframeRef = useRef(null)
+  const audioRef = useRef(null)
   const { ref: musicRef, inView: musicInView } = useInView({ threshold: 0.5 })
 
   useEffect(() => {
-    if (!iframeRef.current) return
-    const cmd = musicInView ? 'playVideo' : 'pauseVideo'
-    iframeRef.current.contentWindow?.postMessage(
-      JSON.stringify({ event: 'command', func: cmd, args: [] }), '*'
-    )
+    if (!audioRef.current) return
+    if (musicInView) {
+      audioRef.current.play().catch(() => {})
+    } else {
+      audioRef.current.pause()
+    }
   }, [musicInView])
 
   const isOwner = user?.id === post.user_id
@@ -235,21 +236,21 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
           const ytId = getYouTubeId(currentPost.music_url)
           if (ytId) {
             return (
-              <div ref={musicRef} className="px-4 pb-2">
-                <iframe
-                  ref={iframeRef}
-                  src={`https://www.youtube-nocookie.com/embed/${ytId}?enablejsapi=1&rel=0&modestbranding=1&autoplay=0`}
-                  className="w-full rounded-xl"
-                  style={{ height: '60px' }}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  title="music"
-                />
+              <div className="px-4 pb-2">
+                <a href={currentPost.music_url} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-3 bg-[#1a1a2e] hover:bg-[#22223a] border border-[#2a2a3f] rounded-xl px-3 py-2 transition-colors group">
+                  <div className="w-7 h-7 rounded-lg bg-red-600 flex items-center justify-center flex-shrink-0">
+                    <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-white"><path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/></svg>
+                  </div>
+                  <p className="text-sm text-white font-medium">YouTube'da Dinle ↗</p>
+                </a>
               </div>
             )
           }
           return (
-            <div className="px-4 pb-2">
-              <audio controls src={currentPost.music_url} className="w-full h-8" style={{ colorScheme: 'dark' }} />
+            <div ref={musicRef} className="px-4 pb-2">
+              <audio ref={audioRef} src={currentPost.music_url} loop
+                controls className="w-full h-8" style={{ colorScheme: 'dark' }} />
             </div>
           )
         })()}

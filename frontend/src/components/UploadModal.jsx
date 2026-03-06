@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { X, Upload, Search, Video, Loader2, Check } from 'lucide-react'
+import { X, Upload, Search, Video, Loader2, Check, Music, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
@@ -12,6 +12,9 @@ export default function UploadModal({ onClose, onSuccess }) {
   const [caption, setCaption] = useState('')
   const [tags, setTags] = useState('')
   const [musicUrl, setMusicUrl] = useState('')
+  const [musicFileName, setMusicFileName] = useState('')
+  const [musicUploading, setMusicUploading] = useState(false)
+  const musicFileRef = useRef()
   const [loading, setLoading] = useState(false)
 
   // Upload tab
@@ -72,6 +75,22 @@ export default function UploadModal({ onClose, onSuccess }) {
     } finally {
       setConvertLoading(false)
     }
+  }
+
+  async function handleMusicSelect(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    if (!file.type.startsWith('audio/')) { toast.error('Ses dosyası seçmelisin (mp3, ogg, wav...)'); return }
+    if (file.size > 15 * 1024 * 1024) { toast.error('Maks 15MB'); return }
+    setMusicUploading(true)
+    const path = `music/${user.id}/${Date.now()}_${file.name}`
+    const { error } = await supabase.storage.from('gifs').upload(path, file, { contentType: file.type })
+    if (error) { toast.error('Müzik yükleme hatası'); setMusicUploading(false); return }
+    const { data: { publicUrl } } = supabase.storage.from('gifs').getPublicUrl(path)
+    setMusicUrl(publicUrl)
+    setMusicFileName(file.name)
+    setMusicUploading(false)
+    toast.success('Müzik yüklendi!')
   }
 
   async function publish() {
@@ -261,7 +280,26 @@ export default function UploadModal({ onClose, onSuccess }) {
           <div className="space-y-3 pt-2">
             <input className="input" placeholder="Açıklama yaz..." value={caption} onChange={e => setCaption(e.target.value)} />
             <input className="input" placeholder="Tag'ler (virgülle ayır: komedi, meme, ...)" value={tags} onChange={e => setTags(e.target.value)} />
-            <input className="input" placeholder="Müzik URL'i (opsiyonel, .mp3/.ogg)" value={musicUrl} onChange={e => setMusicUrl(e.target.value)} />
+            <input ref={musicFileRef} type="file" accept="audio/*" className="hidden" onChange={handleMusicSelect} />
+            {musicFileName ? (
+              <div className="flex items-center gap-3 bg-[#1a1a2e] border border-[#2a2a3f] rounded-xl px-3 py-2">
+                <Music className="w-4 h-4 text-brand-400 flex-shrink-0" />
+                <p className="text-sm text-gray-300 flex-1 truncate">{musicFileName}</p>
+                <button onClick={() => { setMusicUrl(''); setMusicFileName('') }} className="text-gray-500 hover:text-red-400 transition-colors">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => musicFileRef.current?.click()}
+                disabled={musicUploading}
+                className="w-full flex items-center gap-2 px-3 py-2 bg-[#1a1a2e] border border-dashed border-[#3a3a5c] rounded-xl text-sm text-gray-500 hover:border-brand-500 hover:text-brand-400 transition-colors"
+              >
+                {musicUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Music className="w-4 h-4" />}
+                {musicUploading ? 'Yükleniyor...' : 'Müzik ekle (mp3, ogg, wav) — opsiyonel'}
+              </button>
+            )}
           </div>
         </div>
 
