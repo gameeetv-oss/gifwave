@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { Link } from 'react-router-dom'
-import { Heart, MessageCircle, UserPlus, Repeat2, MessageSquare, Loader2, Check, X } from 'lucide-react'
+import { Heart, MessageCircle, UserPlus, Repeat2, MessageSquare, Loader2, Check, X, BadgeCheck } from 'lucide-react'
 
 const TYPE_META = {
   like:           { icon: Heart,          color: 'text-red-400',    bg: 'bg-red-500/10',    text: "GIF'ini beğendi" },
@@ -26,7 +26,7 @@ export default function Notifications() {
   async function loadNotifications() {
     const { data } = await supabase
       .from('notifications')
-      .select('*, from_profile:profiles!fk_notif_from_profiles(id, username, display_name, avatar_url), post:posts(gif_url)')
+      .select('*, from_profile:profiles!fk_notif_from_profiles(id, username, display_name, avatar_url, is_verified), post:posts(gif_url)')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(60)
@@ -84,9 +84,10 @@ export default function Notifications() {
                   {fromUser?.avatar_url ? <img src={fromUser.avatar_url} alt="" className="w-full h-full object-cover" /> : fromUser?.username?.[0]?.toUpperCase()}
                 </Link>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm truncate">
-                    <Link to={`/profile/${fromUser?.username}`} className="font-semibold text-brand-400 hover:text-brand-300">
+                  <p className="text-sm">
+                    <Link to={`/profile/${fromUser?.username}`} className="font-semibold text-brand-400 hover:text-brand-300 inline-flex items-center gap-0.5">
                       {fromUser?.display_name || fromUser?.username}
+                      {fromUser?.is_verified && <BadgeCheck className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
                     </Link>
                     {' '}{text}
                   </p>

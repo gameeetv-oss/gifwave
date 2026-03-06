@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { X, UserMinus, Loader2 } from 'lucide-react'
+import { X, UserMinus, Loader2, BadgeCheck } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
@@ -24,13 +24,13 @@ export default function FollowModal({ profileId, type, onClose, onCountChange })
     if (type === 'followers') {
       const { data } = await supabase
         .from('follows')
-        .select('profiles!fk_follows_follower_profiles(id, username, display_name, avatar_url)')
+        .select('profiles!fk_follows_follower_profiles(id, username, display_name, avatar_url, is_verified)')
         .eq('following_id', profileId)
       profiles = (data || []).map(d => d.profiles).filter(Boolean)
     } else {
       const { data } = await supabase
         .from('follows')
-        .select('profiles!fk_follows_following_profiles(id, username, display_name, avatar_url)')
+        .select('profiles!fk_follows_following_profiles(id, username, display_name, avatar_url, is_verified)')
         .eq('follower_id', profileId)
       profiles = (data || []).map(d => d.profiles).filter(Boolean)
     }
@@ -94,7 +94,10 @@ export default function FollowModal({ profileId, type, onClose, onCountChange })
                     : (p.display_name || p.username)?.[0]?.toUpperCase()}
                 </div>
                 <div className="min-w-0">
-                  <p className="font-semibold text-sm truncate">{p.display_name || p.username}</p>
+                  <p className="font-semibold text-sm flex items-center gap-1">
+                    <span className="truncate">{p.display_name || p.username}</span>
+                    {p.is_verified && <BadgeCheck className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
+                  </p>
                   <p className="text-gray-500 text-xs">@{p.username}</p>
                 </div>
               </Link>

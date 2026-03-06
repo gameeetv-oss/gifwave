@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { usePresence } from '../context/PresenceContext'
 import { useBlock } from '../context/BlockContext'
-import { Send, Loader2, ArrowLeft, Eye, EyeOff } from 'lucide-react'
+import { Send, Loader2, ArrowLeft, Eye, EyeOff, BadgeCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 // ✓ / ✓✓ bileşeni
@@ -73,10 +73,10 @@ export default function Messages() {
     setLoading(true)
     const [sentRes, receivedRes] = await Promise.all([
       supabase.from('messages')
-        .select('*, receiver:profiles!messages_receiver_id_fkey(id, username, display_name, avatar_url)')
+        .select('*, receiver:profiles!messages_receiver_id_fkey(id, username, display_name, avatar_url, is_verified)')
         .eq('sender_id', user.id).order('created_at', { ascending: false }),
       supabase.from('messages')
-        .select('*, sender:profiles!messages_sender_id_fkey(id, username, display_name, avatar_url)')
+        .select('*, sender:profiles!messages_sender_id_fkey(id, username, display_name, avatar_url, is_verified)')
         .eq('receiver_id', user.id).order('created_at', { ascending: false }),
     ])
 
@@ -202,7 +202,10 @@ export default function Messages() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="font-medium text-sm truncate">{conv.profile?.display_name || conv.profile?.username}</p>
+                      <p className="font-medium text-sm flex items-center gap-1 min-w-0">
+                          <span className="truncate">{conv.profile?.display_name || conv.profile?.username}</span>
+                          {conv.profile?.is_verified && <BadgeCheck className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
+                        </p>
                       {conv.unread > 0 && (
                         <span className="bg-brand-500 text-white text-xs rounded-full min-w-[20px] h-5 px-1 flex items-center justify-center flex-shrink-0">
                           {conv.unread > 9 ? '9+' : conv.unread}
@@ -236,7 +239,10 @@ export default function Messages() {
                   {isPartnerOnline && <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-[#0a0a14]" />}
                 </div>
                 <div className="min-w-0">
-                  <p className="font-semibold text-sm truncate">{activeConv.profile.display_name || activeConv.profile.username}</p>
+                  <p className="font-semibold text-sm flex items-center gap-1">
+                      <span className="truncate">{activeConv.profile.display_name || activeConv.profile.username}</span>
+                      {activeConv.profile.is_verified && <BadgeCheck className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
+                    </p>
                   <p className="text-xs">
                     {isPartnerOnline
                       ? <span className="text-green-400">● Aktif</span>
