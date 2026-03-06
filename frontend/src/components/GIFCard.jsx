@@ -31,15 +31,36 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
 
   const audioRef = useRef(null)
   const { ref: musicRef, inView: musicInView } = useInView({ threshold: 0.5 })
+  const [audioSrc, setAudioSrc] = useState(null)
+  const [musicLoading, setMusicLoading] = useState(false)
+  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
+
+  // YouTube URL varsa otomatik çıkar, audio URL varsa direkt kullan
+  useEffect(() => {
+    if (!currentPost.music_url) return
+    const ytId = getYouTubeId(currentPost.music_url)
+    if (!ytId) { setAudioSrc(currentPost.music_url); return }
+    setMusicLoading(true)
+    fetch(`${BACKEND_URL}/music/extract?url=${encodeURIComponent(currentPost.music_url)}`, { method: 'POST' })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.url) {
+          setAudioSrc(data.url)
+          supabase.from('posts').update({ music_url: data.url }).eq('id', currentPost.id)
+        }
+      })
+      .catch(() => {})
+      .finally(() => setMusicLoading(false))
+  }, [currentPost.id])
 
   useEffect(() => {
-    if (!audioRef.current) return
+    if (!audioRef.current || !audioSrc) return
     if (musicInView) {
       audioRef.current.play().catch(() => {})
     } else {
       audioRef.current.pause()
     }
-  }, [musicInView])
+  }, [musicInView, audioSrc])
 
   const isOwner = user?.id === post.user_id
 
@@ -232,28 +253,19 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
         </div>
 
         {/* Music Player */}
-        {currentPost.music_url && (() => {
-          const ytId = getYouTubeId(currentPost.music_url)
-          if (ytId) {
-            return (
-              <div className="px-4 pb-2">
-                <a href={currentPost.music_url} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-3 bg-[#1a1a2e] hover:bg-[#22223a] border border-[#2a2a3f] rounded-xl px-3 py-2 transition-colors group">
-                  <div className="w-7 h-7 rounded-lg bg-red-600 flex items-center justify-center flex-shrink-0">
-                    <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-white"><path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/></svg>
-                  </div>
-                  <p className="text-sm text-white font-medium">YouTube'da Dinle ↗</p>
-                </a>
+        {currentPost.music_url && (
+          <div ref={musicRef} className="px-4 pb-2">
+            {audioSrc ? (
+              <audio ref={audioRef} src={audioSrc} loop controls
+                className="w-full h-8" style={{ colorScheme: 'dark' }} />
+            ) : musicLoading ? (
+              <div className="flex items-center gap-2 bg-[#1a1a2e] border border-[#2a2a3f] rounded-xl px-3 py-2 text-xs text-gray-500">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-400" />
+                Müzik hazırlanıyor...
               </div>
-            )
-          }
-          return (
-            <div ref={musicRef} className="px-4 pb-2">
-              <audio ref={audioRef} src={currentPost.music_url} loop
-                controls className="w-full h-8" style={{ colorScheme: 'dark' }} />
-            </div>
-          )
-        })()}
+            ) : null}
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex items-center gap-1 px-3 py-3">
