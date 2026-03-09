@@ -8,6 +8,9 @@ import { usePresence } from '../context/PresenceContext'
 import toast from 'react-hot-toast'
 import CommentModal from './CommentModal'
 
+// Mobil cihaz tespiti (touch screen = mobil)
+const isMobile = typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0
+
 // YouTube IFrame API'sini global olarak bir kez yükle
 function loadYTApi() {
   if (window.YT && window.YT.Player) return Promise.resolve()
@@ -44,8 +47,9 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
 
   // ── Müzik ──────────────────────────────────────────────────
   const audioRef = useRef(null)
-  const ytContainerRef = useRef(null)  // YT.Player bu div'i iframe'e dönüştürür
-  const ytPlayerRef = useRef(null)     // YT.Player instance
+  const ytContainerRef = useRef(null)    // YT.Player bu div'i iframe'e dönüştürür
+  const ytPlayerRef = useRef(null)       // YT.Player instance
+  const userStartedRef = useRef(false)   // Kullanıcı en az bir kez tıkladı mı (mobil için)
   const { ref: musicRef, inView: musicInView } = useInView({ threshold: 0.3 })
   const ytMusicId = currentPost.music_url ? getYouTubeId(currentPost.music_url) : null
   const [ytReady, setYtReady] = useState(false)
@@ -78,8 +82,8 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
         height: '112',
         videoId: ytMusicId,
         playerVars: {
-          autoplay: 1,   // API hazır olur olmaz çalmaya başla
-          mute: 1,       // Muted autoplay — tüm tarayıcılarda izinli
+          autoplay: isMobile ? 0 : 1,  // Mobilde autoplay yok (iOS/Android bloklar)
+          mute: 1,                      // Muted autoplay — desktop'ta izinli
           controls: 0,
           playsinline: 1,
           rel: 0,
@@ -113,8 +117,18 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
     const p = ytPlayerRef.current
     if (!ytReady || !p) return
     if (musicInView) {
-      try { p.unMute(); p.setVolume(100); p.playVideo() } catch {}
-      setYtPlaying(true)
+      if (isMobile) {
+        // Mobil: sadece kullanıcı daha önce play'e tıkladıysa otomatik devam et
+        if (userStartedRef.current) {
+          try { p.playVideo() } catch {}
+          setYtPlaying(true)
+        }
+        // Henüz tıklamadıysa play butonuna basmasını bekle
+      } else {
+        // Desktop: direkt unMute + play (user gesture olmadan çalışır)
+        try { p.unMute(); p.setVolume(100); p.playVideo() } catch {}
+        setYtPlaying(true)
+      }
     } else {
       try { p.mute(); p.pauseVideo() } catch {}
       setYtPlaying(false)
@@ -128,6 +142,8 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
       try { p.mute(); p.pauseVideo() } catch {}
       setYtPlaying(false)
     } else {
+      // Bu bir user gesture → unMute mobilde de çalışır
+      userStartedRef.current = true
       try { p.unMute(); p.setVolume(100); p.playVideo() } catch {}
       setYtPlaying(true)
     }
