@@ -110,7 +110,7 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
   }
 
   async function share() {
-    const url = window.location.origin
+    const url = `${window.location.origin}/post/${post.id}`
     if (navigator.share) navigator.share({ title: currentPost.caption || 'GifWave', url })
     else { await navigator.clipboard.writeText(url); toast.success('Link kopyalandı!') }
   }
