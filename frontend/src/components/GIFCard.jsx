@@ -8,6 +8,19 @@ import { usePresence } from '../context/PresenceContext'
 import toast from 'react-hot-toast'
 import CommentModal from './CommentModal'
 
+// YouTube IFrame API'sini global olarak bir kez yükle
+function loadYTApi() {
+  if (window.YT && window.YT.Player) return Promise.resolve()
+  if (window._ytApiPromise) return window._ytApiPromise
+  window._ytApiPromise = new Promise(resolve => {
+    const script = document.createElement('script')
+    script.src = 'https://www.youtube.com/iframe_api'
+    document.head.appendChild(script)
+    window.onYouTubeIframeAPIReady = resolve
+  })
+  return window._ytApiPromise
+}
+
 export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete }) {
   const { user, profile: myProfile } = useAuth()
   const { onlineUsers } = usePresence()
@@ -29,18 +42,19 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
   useEffect(() => { setLiked(post.user_liked || false) }, [post.user_liked])
   useEffect(() => { setReposted(post.user_reposted || false) }, [post.user_reposted])
 
+  // ── Müzik ──────────────────────────────────────────────────
   const audioRef = useRef(null)
-  const ytIframeRef = useRef(null)
-  const { ref: musicRef, inView: musicInView } = useInView({ threshold: 0.4 })
+  const ytContainerRef = useRef(null)  // YT.Player bu div'i iframe'e dönüştürür
+  const ytPlayerRef = useRef(null)     // YT.Player instance
+  const { ref: musicRef, inView: musicInView } = useInView({ threshold: 0.3 })
   const ytMusicId = currentPost.music_url ? getYouTubeId(currentPost.music_url) : null
   const [ytReady, setYtReady] = useState(false)
   const [ytPlaying, setYtPlaying] = useState(false)
   const [ytTitle, setYtTitle] = useState('YouTube Müziği')
-  // iframe yalnızca kart görünüme girince oluşturulur (performans)
-  const [ytMounted, setYtMounted] = useState(false)
+  const [ytMounted, setYtMounted] = useState(false)  // container DOM'da var mı
   const [audioSrc, setAudioSrc] = useState(null)
 
-  // Kart görünüme girince iframe'i bir kez oluştur
+  // Kart görünüme girince container'ı oluştur (bir kez)
   useEffect(() => {
     if (musicInView && ytMusicId && !ytMounted) setYtMounted(true)
   }, [musicInView, ytMusicId])
@@ -52,47 +66,71 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
       .then(r => r.json()).then(d => { if (d.title) setYtTitle(d.title) }).catch(() => {})
   }, [ytMusicId])
 
-  // YouTube IFrame API mesajlarını dinle
+  // Container mount olduktan sonra YT.Player oluştur
   useEffect(() => {
-    if (!ytMusicId) return
-    function onMsg(e) {
-      if (!e.data) return
-      try {
-        const d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data
-        if (d.event === 'onReady') setYtReady(true)
-        if (d.event === 'infoDelivery' && d.info?.playerState !== undefined) {
-          setYtPlaying(d.info.playerState === 1)
-        }
-      } catch {}
-    }
-    window.addEventListener('message', onMsg)
-    return () => window.removeEventListener('message', onMsg)
-  }, [ytMusicId])
+    if (!ytMounted || !ytMusicId || !ytContainerRef.current) return
+    let player
 
-  // Görünüme girince unmute (iframe mute=1&autoplay=1 ile başlar), çıkınca mute+pause
+    loadYTApi().then(() => {
+      if (!ytContainerRef.current) return
+      player = new window.YT.Player(ytContainerRef.current, {
+        width: '200',
+        height: '112',
+        videoId: ytMusicId,
+        playerVars: {
+          autoplay: 1,   // API hazır olur olmaz çalmaya başla
+          mute: 1,       // Muted autoplay — tüm tarayıcılarda izinli
+          controls: 0,
+          playsinline: 1,
+          rel: 0,
+          modestbranding: 1,
+        },
+        events: {
+          onReady: () => {
+            ytPlayerRef.current = player
+            setYtReady(true)
+          },
+          onStateChange: (e) => {
+            // 1=oynuyor, 2=durduruldu, 0=bitti
+            setYtPlaying(e.data === 1)
+          },
+        },
+      })
+    })
+
+    return () => {
+      if (ytPlayerRef.current) {
+        try { ytPlayerRef.current.destroy() } catch {}
+        ytPlayerRef.current = null
+        setYtReady(false)
+        setYtPlaying(false)
+      }
+    }
+  }, [ytMounted, ytMusicId])
+
+  // Görünüme girince sesini aç, çıkınca kapat
   useEffect(() => {
-    if (!ytReady) return
+    const p = ytPlayerRef.current
+    if (!ytReady || !p) return
     if (musicInView) {
-      ytCmd('unMute')
-      ytCmd('setVolume', [100])
-      ytCmd('playVideo')
+      try { p.unMute(); p.setVolume(100); p.playVideo() } catch {}
       setYtPlaying(true)
     } else {
-      ytCmd('mute')
-      ytCmd('pauseVideo')
+      try { p.mute(); p.pauseVideo() } catch {}
       setYtPlaying(false)
     }
   }, [musicInView, ytReady])
 
-  function ytCmd(func, args = []) {
-    ytIframeRef.current?.contentWindow?.postMessage(
-      JSON.stringify({ event: 'command', func, args }), '*'
-    )
-  }
-
   function toggleYt() {
-    if (ytPlaying) { ytCmd('mute'); ytCmd('pauseVideo'); setYtPlaying(false) }
-    else { ytCmd('unMute'); ytCmd('setVolume', [100]); ytCmd('playVideo'); setYtPlaying(true) }
+    const p = ytPlayerRef.current
+    if (!p) return
+    if (ytPlaying) {
+      try { p.mute(); p.pauseVideo() } catch {}
+      setYtPlaying(false)
+    } else {
+      try { p.unMute(); p.setVolume(100); p.playVideo() } catch {}
+      setYtPlaying(true)
+    }
   }
 
   // Direkt ses dosyası (Supabase mp3 vb.)
@@ -101,12 +139,12 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
     setAudioSrc(currentPost.music_url)
   }, [currentPost.id])
 
-  // Direkt ses: görünüm alanına girince otomatik çal
   useEffect(() => {
     if (!audioRef.current || !audioSrc) return
     if (musicInView) audioRef.current.play().catch(() => {})
     else audioRef.current.pause()
   }, [musicInView, audioSrc])
+  // ───────────────────────────────────────────────────────────
 
   const isOwner = user?.id === post.user_id
 
@@ -167,10 +205,6 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
   async function handleDelete() {
     setShowMenu(false)
     onDelete?.(post.id)
-  }
-
-  function handleCommentOpen() {
-    setShowComments(true)
   }
 
   function handleCommentClose(newCount) {
@@ -303,25 +337,24 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
           <div ref={musicRef} className="px-4 pb-3">
             {ytMusicId ? (
               <>
-                {/* Gizli YouTube iframe — mute=1&autoplay=1 ile başlar (muted autoplay her zaman izinli),
-                    görünüme girince unMute() ile ses açılır */}
+                {/* YT.Player bu div'i gizli bir iframe'e dönüştürür */}
                 {ytMounted && (
-                  <iframe
-                    ref={ytIframeRef}
-                    src={`https://www.youtube.com/embed/${ytMusicId}?enablejsapi=1&autoplay=1&mute=1&controls=0&playsinline=1`}
-                    style={{ position: 'fixed', top: '-9999px', left: '-9999px', width: '1px', height: '1px', border: 'none' }}
-                    allow="autoplay; encrypted-media"
-                    title="yt-music"
+                  <div
+                    ref={ytContainerRef}
+                    style={{ position: 'fixed', left: '-400px', top: '50%', width: '200px', height: '112px', pointerEvents: 'none' }}
                   />
                 )}
                 {/* Custom oynatıcı UI */}
                 <div className="flex items-center gap-3 bg-[#12121e] border border-[#2a2a3f] rounded-xl px-3 py-2.5">
                   <button onClick={toggleYt}
                     className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-brand-500 hover:bg-brand-600 rounded-full transition-colors">
-                    {ytPlaying ? <Pause className="w-3.5 h-3.5 text-white" /> : <Play className="w-3.5 h-3.5 text-white fill-white" />}
+                    {ytPlaying
+                      ? <Pause className="w-3.5 h-3.5 text-white" />
+                      : <Play className="w-3.5 h-3.5 text-white fill-white" />}
                   </button>
                   <Music className="w-4 h-4 text-brand-400 flex-shrink-0" />
                   <p className="text-xs text-gray-300 truncate flex-1">{ytTitle}</p>
+                  {!ytReady && <Loader2 className="w-3.5 h-3.5 text-gray-600 animate-spin flex-shrink-0" />}
                 </div>
               </>
             ) : audioSrc ? (
@@ -341,7 +374,7 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
             <span>{likeCount}</span>
           </button>
 
-          <button onClick={handleCommentOpen}
+          <button onClick={() => setShowComments(true)}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
               commentCount > 0 ? 'text-blue-400 bg-blue-500/10' : 'text-gray-400 hover:text-blue-400 hover:bg-blue-500/10'
             }`}>
