@@ -198,7 +198,7 @@ export default function Explore() {
     setEditYtInput('')
   }
 
-  function addEditYTMusic() {
+  async function addEditYTMusic() {
     const trimmed = editYtInput.trim()
     if (!trimmed) return
     try {
@@ -206,10 +206,20 @@ export default function Explore() {
       const isYT = u.hostname.includes('youtube.com') || u.hostname === 'youtu.be' || u.hostname.includes('music.youtube.com')
       if (!isYT) { toast.error('Geçersiz YouTube linki'); return }
     } catch { toast.error('Geçersiz URL'); return }
-    setEditMusicUrl(trimmed)
-    setEditMusicFileName('YouTube Müziği')
-    setEditYtInput('')
-    toast.success('Müzik eklendi!')
+    setEditMusicUploading(true)
+    try {
+      const res = await fetch(`${BACKEND_URL}/music/extract?url=${encodeURIComponent(trimmed)}`, { method: 'POST' })
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Hata') }
+      const data = await res.json()
+      setEditMusicUrl(data.url)
+      setEditMusicFileName(data.title || 'YouTube Müziği')
+      setEditYtInput('')
+      toast.success('Müzik eklendi!')
+    } catch (err) {
+      toast.error(err.message || 'Müzik indirilemedi')
+    } finally {
+      setEditMusicUploading(false)
+    }
   }
 
   async function handleEditMusicSelect(e) {
@@ -345,9 +355,10 @@ export default function Explore() {
                     onKeyDown={e => e.key === 'Enter' && addEditYTMusic()}
                   />
                   <button type="button" onClick={addEditYTMusic}
-                    disabled={!editYtInput.trim()}
+                    disabled={!editYtInput.trim() || editMusicUploading}
                     className="btn-primary px-3 py-2 text-sm flex-shrink-0 flex items-center gap-1.5">
-                    <Music className="w-4 h-4" /> Ekle
+                    {editMusicUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Music className="w-4 h-4" />}
+                    {editMusicUploading ? 'İndiriliyor...' : 'Ekle'}
                   </button>
                 </div>
                 <div className="flex items-center gap-2">

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useInView } from 'react-intersection-observer'
-import { Heart, MessageCircle, Share2, Repeat2, MoreHorizontal, Pencil, Check, X, Loader2, Trash2, BadgeCheck, Play, Pause, Music } from 'lucide-react'
+import { Heart, MessageCircle, Share2, Repeat2, MoreHorizontal, Pencil, Check, X, Loader2, Trash2, BadgeCheck, Play, Pause, Music, ExternalLink } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
@@ -353,21 +353,18 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
           <div ref={musicRef} className="px-4 pb-3">
             {ytMusicId ? (
               isMobile ? (
-                // Mobil (iOS dahil): native YouTube embed — JS ile iframe kontrolü iOS'ta çalışmıyor
-                <div className="bg-[#12121e] border border-[#2a2a3f] rounded-xl overflow-hidden">
-                  <div className="flex items-center gap-2 px-3 py-2">
-                    <Music className="w-3.5 h-3.5 text-brand-400 flex-shrink-0" />
-                    <p className="text-xs text-gray-300 truncate">{ytTitle || 'YouTube Müziği'}</p>
-                  </div>
-                  <iframe
-                    src={`https://www.youtube.com/embed/${ytMusicId}?autoplay=0&mute=0&controls=1&playsinline=1&rel=0&modestbranding=1`}
-                    allow="autoplay; encrypted-media"
-                    allowFullScreen
-                    className="w-full"
-                    style={{ height: '40px', border: 'none', display: 'block' }}
-                    title={ytTitle || 'music'}
-                  />
-                </div>
+                // Mobil: eski YouTube URL'li postlar için estetik dış link butonu
+                // Yeni postlar music_url = Supabase URL → <audio> ile çalışır (ytMusicId=null)
+                <a
+                  href={`https://music.youtube.com/watch?v=${ytMusicId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 bg-[#12121e] border border-[#2a2a3f] rounded-xl px-3 py-2.5 hover:border-brand-500/50 transition-colors"
+                >
+                  <Music className="w-4 h-4 text-brand-400 flex-shrink-0" />
+                  <p className="text-xs text-gray-300 truncate flex-1">{ytTitle || 'YouTube Müziği'}</p>
+                  <ExternalLink className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
+                </a>
               ) : (
                 // Desktop: gizli YT.Player API + custom UI + viewport auto-play
                 <>

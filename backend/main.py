@@ -116,6 +116,49 @@ async def convert_video_to_gif(file: UploadFile = File(...)):
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://nwdwfwokdpjdkpsztuuo.supabase.co")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 
+# Piped API — YouTube'u yt-dlp olmadan audio stream'e dönüştürür
+PIPED_INSTANCES = [
+    "https://pipedapi.kavin.rocks",
+    "https://piped-api.garudalinux.org",
+    "https://api.piped.yt",
+    "https://pipedapi.tokhmi.xyz",
+]
+
+
+def _extract_youtube_id(url: str):
+    from urllib.parse import urlparse, parse_qs
+    try:
+        u = urlparse(url)
+        if "youtube.com" in u.netloc or "music.youtube.com" in u.netloc:
+            return parse_qs(u.query).get("v", [None])[0]
+        if "youtu.be" in u.netloc:
+            return u.path.lstrip("/").split("?")[0]
+    except Exception:
+        pass
+    return None
+
+
+async def _get_piped_audio(video_id: str):
+    """Piped API ile YouTube ses stream URL'si al — birden fazla instance dene."""
+    for instance in PIPED_INSTANCES:
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.get(f"{instance}/streams/{video_id}")
+                if resp.status_code != 200:
+                    continue
+                data = resp.json()
+                title = data.get("title", "Müzik")
+                streams = data.get("audioStreams", [])
+                if not streams:
+                    continue
+                # m4a/mp4 öncelikli, yoksa webm
+                m4a = [s for s in streams if "mp4" in s.get("mimeType", "")]
+                best = sorted(m4a or streams, key=lambda x: x.get("bitrate", 0), reverse=True)[0]
+                return best["url"], best.get("mimeType", "audio/mp4"), title
+        except Exception:
+            continue
+    return None, None, None
+
 
 @app.get("/music/proxy")
 async def proxy_music(url: str = Query(...)):
@@ -164,55 +207,30 @@ async def proxy_music(url: str = Query(...)):
 
 @app.post("/music/extract")
 async def extract_music(url: str = Query(...)):
-    """YouTube ses stream URL'sini al (download=False), httpx ile indir, Supabase'e yükle."""
-    import yt_dlp
-
+    """Piped API ile YouTube sesini Supabase storage'a yükle — yt-dlp bağımlılığı yok."""
     if not SUPABASE_SERVICE_KEY:
         raise HTTPException(status_code=500, detail="SUPABASE_SERVICE_ROLE_KEY eksik")
 
-    # download=False ile stream URL al — bot tespiti tetiklenmiyor (proxy gibi)
-    def get_stream_info():
-        ydl_opts = {
-            "format": "bestaudio[ext=m4a]/bestaudio/best",
-            "quiet": True,
-            "no_warnings": True,
-            "extractor_args": {"youtube": {"player_client": ["android"]}},
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            title = info.get("title", "Müzik")
-            video_id = info.get("id", "unknown")
-            formats = info.get("formats", [info])
-            audio = [f for f in formats if f.get("vcodec") == "none" and f.get("acodec") != "none"]
-            if audio:
-                best = sorted(audio, key=lambda f: f.get("abr") or 0, reverse=True)[0]
-                return best["url"], best.get("http_headers", {}), best.get("ext", "m4a"), title, video_id
-            return info.get("url", ""), {}, "m4a", title, video_id
+    video_id = _extract_youtube_id(url)
+    if not video_id:
+        raise HTTPException(status_code=400, detail="Geçersiz YouTube URL'si")
 
-    try:
-        stream_url, yt_headers, ext, title, video_id = await asyncio.get_event_loop().run_in_executor(None, get_stream_info)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"İndirme hatası: {str(e)[:200]}")
-
+    stream_url, mime_type, title = await _get_piped_audio(video_id)
     if not stream_url:
-        raise HTTPException(status_code=400, detail="Ses URL'si alınamadı")
+        raise HTTPException(status_code=400, detail="Ses stream'i alınamadı (Piped API)")
 
-    req_headers = {}
-    if yt_headers.get("User-Agent"):
-        req_headers["User-Agent"] = yt_headers["User-Agent"]
-
-    # httpx ile audio verisini indir
     try:
         async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
-            audio_resp = await client.get(stream_url, headers=req_headers)
+            audio_resp = await client.get(stream_url)
+            audio_resp.raise_for_status()
             audio_data = audio_resp.content
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ses indirme hatası: {str(e)[:120]}")
+        raise HTTPException(status_code=500, detail=f"Ses indirme hatası: {str(e)[:80]}")
 
-    mime_map = {"m4a": "audio/mp4", "webm": "audio/webm", "mp3": "audio/mpeg", "ogg": "audio/ogg"}
-    mime = mime_map.get(ext, "audio/mp4")
-
+    ext = "m4a" if "mp4" in (mime_type or "") else "webm"
+    mime = mime_type or "audio/mp4"
     filename = f"yt_{video_id}_{int(time.time())}.{ext}"
+
     async with httpx.AsyncClient(timeout=60) as client:
         res = await client.post(
             f"{SUPABASE_URL}/storage/v1/object/music/{filename}",
