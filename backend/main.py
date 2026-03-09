@@ -127,6 +127,7 @@ async def proxy_music(url: str = Query(...)):
             "format": "bestaudio[ext=m4a]/bestaudio/best",
             "quiet": True,
             "no_warnings": True,
+            "extractor_args": {"youtube": {"player_client": ["android"]}},
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -176,6 +177,7 @@ async def extract_music(url: str = Query(...)):
             "outtmpl": os.path.join(tmpdir, "%(id)s.%(ext)s"),
             "quiet": True,
             "no_warnings": True,
+            "extractor_args": {"youtube": {"player_client": ["android"]}},
         }
 
         try:
