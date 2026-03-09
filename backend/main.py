@@ -7,7 +7,7 @@ import httpx
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 
 app = FastAPI(title="GifWave Backend")
 
@@ -122,9 +122,9 @@ SUPABASE_URL = os.getenv("SUPABASE_URL", "https://nwdwfwokdpjdkpsztuuo.supabase.
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 
 
-@app.get("/music/stream-url")
-async def get_stream_url(url: str = Query(...)):
-    """Sadece stream URL'sini döndür (indirme yok, hızlı ~2-3 sn)."""
+@app.get("/music/proxy")
+async def proxy_music(url: str = Query(...)):
+    """YouTube sesini CORS sorunsuz proxy üzerinden aktar."""
     import yt_dlp
 
     def extract():
@@ -139,14 +139,31 @@ async def get_stream_url(url: str = Query(...)):
             audio = [f for f in formats if f.get("vcodec") == "none" and f.get("acodec") != "none"]
             if audio:
                 best = sorted(audio, key=lambda f: f.get("abr") or 0, reverse=True)[0]
-                return best["url"], info.get("title", "Müzik")
-            return info.get("url", ""), info.get("title", "Müzik")
+                return best["url"], best.get("http_headers", {}), best.get("ext", "m4a")
+            return info.get("url", ""), {}, "m4a"
 
     try:
-        stream_url, title = await asyncio.get_event_loop().run_in_executor(None, extract)
-        return {"url": stream_url, "title": title}
+        stream_url, yt_headers, ext = await asyncio.get_event_loop().run_in_executor(None, extract)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e)[:120])
+
+    if not stream_url:
+        raise HTTPException(status_code=400, detail="Ses URL'si alınamadı")
+
+    req_headers = {}
+    if yt_headers.get("User-Agent"):
+        req_headers["User-Agent"] = yt_headers["User-Agent"]
+
+    mime_map = {"m4a": "audio/mp4", "webm": "audio/webm", "mp3": "audio/mpeg", "ogg": "audio/ogg"}
+    mime = mime_map.get(ext, "audio/mp4")
+
+    async def stream():
+        async with httpx.AsyncClient(timeout=300) as client:
+            async with client.stream("GET", stream_url, headers=req_headers, follow_redirects=True) as resp:
+                async for chunk in resp.aiter_bytes(16384):
+                    yield chunk
+
+    return StreamingResponse(stream(), media_type=mime, headers={"Cache-Control": "no-store"})
 
 
 @app.post("/music/extract")

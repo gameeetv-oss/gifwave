@@ -32,30 +32,22 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
   const audioRef = useRef(null)
   const { ref: musicRef, inView: musicInView } = useInView({ threshold: 0.5 })
   const [audioSrc, setAudioSrc] = useState(null)
-  const [musicLoading, setMusicLoading] = useState(false)
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
 
-  // YouTube URL varsa: önce stream URL ile hemen çal (~2-3sn), arka planda Supabase'e kaydet
+  // YouTube URL → backend proxy (CORS sorunsuz), değilse direkt çal
   useEffect(() => {
     if (!currentPost.music_url) return
     const ytId = getYouTubeId(currentPost.music_url)
     if (!ytId) { setAudioSrc(currentPost.music_url); return }
 
-    setMusicLoading(true)
-    // Adım 1: Hızlı stream URL (indirme yok)
-    fetch(`${BACKEND_URL}/music/stream-url?url=${encodeURIComponent(currentPost.music_url)}`)
+    // Proxy üzerinden çal (backend YouTube CDN'i aktar, CORS sorunu yok)
+    setAudioSrc(`${BACKEND_URL}/music/proxy?url=${encodeURIComponent(currentPost.music_url)}`)
+
+    // Arka planda kalıcı kayıt (Supabase'e yükle → DB güncelle → sonraki yüklemede anında çalar)
+    fetch(`${BACKEND_URL}/music/extract?url=${encodeURIComponent(currentPost.music_url)}`, { method: 'POST' })
       .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (!data?.url) return
-        setAudioSrc(data.url)
-        setMusicLoading(false)
-        // Adım 2: Arka planda kalıcı kayıt (DB güncelle)
-        fetch(`${BACKEND_URL}/music/extract?url=${encodeURIComponent(currentPost.music_url)}`, { method: 'POST' })
-          .then(r => r.ok ? r.json() : null)
-          .then(d => { if (d?.url) supabase.from('posts').update({ music_url: d.url }).eq('id', currentPost.id) })
-          .catch(() => {})
-      })
-      .catch(() => setMusicLoading(false))
+      .then(d => { if (d?.url) supabase.from('posts').update({ music_url: d.url }).eq('id', currentPost.id) })
+      .catch(() => {})
   }, [currentPost.id])
 
   useEffect(() => {
@@ -260,15 +252,10 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
         {/* Music Player */}
         {currentPost.music_url && (
           <div ref={musicRef} className="px-4 pb-2">
-            {audioSrc ? (
+            {audioSrc && (
               <audio ref={audioRef} src={audioSrc} loop controls
                 className="w-full h-8" style={{ colorScheme: 'dark' }} />
-            ) : musicLoading ? (
-              <div className="flex items-center gap-2 bg-[#1a1a2e] border border-[#2a2a3f] rounded-xl px-3 py-2 text-xs text-gray-500">
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-400" />
-                Müzik hazırlanıyor...
-              </div>
-            ) : null}
+            )}
           </div>
         )}
 
