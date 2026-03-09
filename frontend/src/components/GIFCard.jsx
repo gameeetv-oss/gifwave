@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useInView } from 'react-intersection-observer'
-import { Heart, MessageCircle, Share2, Repeat2, MoreHorizontal, Pencil, Check, X, Loader2, Trash2, BadgeCheck } from 'lucide-react'
+import { Heart, MessageCircle, Share2, Repeat2, MoreHorizontal, Pencil, Check, X, Loader2, Trash2, BadgeCheck, Play, Pause, Music } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
@@ -30,22 +30,56 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
   useEffect(() => { setReposted(post.user_reposted || false) }, [post.user_reposted])
 
   const audioRef = useRef(null)
-  const { ref: musicRef, inView: musicInView } = useInView({ threshold: 0.5 })
-  const [audioSrc, setAudioSrc] = useState(null)
+  const ytIframeRef = useRef(null)
+  const { ref: musicRef, inView: musicInView } = useInView({ threshold: 0.3 })
   const ytMusicId = currentPost.music_url ? getYouTubeId(currentPost.music_url) : null
+  const [ytLoaded, setYtLoaded] = useState(false)   // iframe DOM'a eklendi mi
+  const [ytPlaying, setYtPlaying] = useState(false)
+  const [ytTitle, setYtTitle] = useState('YouTube Müziği')
+  const [audioSrc, setAudioSrc] = useState(null)
 
-  // Direkt ses dosyası (Supabase) için audioSrc ayarla; YouTube → iframe ile çalınır
+  // YouTube başlığını oEmbed ile al (ücretsiz, auth yok)
+  useEffect(() => {
+    if (!ytMusicId) return
+    fetch(`https://www.youtube.com/oembed?url=https://youtube.com/watch?v=${ytMusicId}&format=json`)
+      .then(r => r.json()).then(d => { if (d.title) setYtTitle(d.title) }).catch(() => {})
+  }, [ytMusicId])
+
+  // Direkt ses dosyası (Supabase mp3 vb.)
   useEffect(() => {
     if (!currentPost.music_url || ytMusicId) return
     setAudioSrc(currentPost.music_url)
   }, [currentPost.id])
 
-  // Direkt ses dosyası: görünüm alanına girince otomatik çal
+  // Direkt ses: görünüm alanına girince otomatik çal
   useEffect(() => {
     if (!audioRef.current || !audioSrc) return
     if (musicInView) audioRef.current.play().catch(() => {})
     else audioRef.current.pause()
   }, [musicInView, audioSrc])
+
+  // YouTube: alanın dışına çıkınca durdur
+  useEffect(() => {
+    if (!ytPlaying || musicInView) return
+    ytCommand('pauseVideo')
+    setYtPlaying(false)
+  }, [musicInView])
+
+  function ytCommand(func) {
+    ytIframeRef.current?.contentWindow?.postMessage(
+      JSON.stringify({ event: 'command', func, args: [] }), '*'
+    )
+  }
+
+  function toggleYt() {
+    if (!ytLoaded) {
+      setYtLoaded(true)   // iframe DOM'a eklenir, autoplay=1 ile başlar
+      setYtPlaying(true)
+      return
+    }
+    if (ytPlaying) { ytCommand('pauseVideo'); setYtPlaying(false) }
+    else { ytCommand('playVideo'); setYtPlaying(true) }
+  }
 
   const isOwner = user?.id === post.user_id
 
@@ -239,18 +273,30 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
 
         {/* Music Player */}
         {currentPost.music_url && (
-          <div ref={musicRef} className="px-4 pb-2">
+          <div ref={musicRef} className="px-4 pb-3">
             {ytMusicId ? (
-              // YouTube → iframe embed (proxy gerektirmez, her zaman çalışır)
-              <iframe
-                src={`https://www.youtube.com/embed/${ytMusicId}?controls=1&modestbranding=1&rel=0`}
-                className="w-full rounded-lg"
-                style={{ height: '80px', border: 'none' }}
-                allow="encrypted-media"
-                loading="lazy"
-              />
+              <>
+                {/* Gizli YouTube iframe — sadece ses çalar, görünmez */}
+                {ytLoaded && (
+                  <iframe
+                    ref={ytIframeRef}
+                    src={`https://www.youtube.com/embed/${ytMusicId}?enablejsapi=1&autoplay=1&controls=0`}
+                    style={{ position: 'fixed', top: '-9999px', left: '-9999px', width: '1px', height: '1px', opacity: 0, pointerEvents: 'none' }}
+                    allow="autoplay; encrypted-media"
+                    title="music"
+                  />
+                )}
+                {/* Custom oynatıcı UI */}
+                <div className="flex items-center gap-3 bg-[#12121e] border border-[#2a2a3f] rounded-xl px-3 py-2.5">
+                  <button onClick={toggleYt}
+                    className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-brand-500 hover:bg-brand-600 rounded-full transition-colors">
+                    {ytPlaying ? <Pause className="w-3.5 h-3.5 text-white" /> : <Play className="w-3.5 h-3.5 text-white fill-white" />}
+                  </button>
+                  <Music className="w-4 h-4 text-brand-400 flex-shrink-0" />
+                  <p className="text-xs text-gray-300 truncate flex-1">{ytTitle}</p>
+                </div>
+              </>
             ) : audioSrc ? (
-              // Direkt ses dosyası (Supabase mp3 vb.)
               <audio ref={audioRef} src={audioSrc} loop controls
                 className="w-full h-8" style={{ colorScheme: 'dark' }} />
             ) : null}
