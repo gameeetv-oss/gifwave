@@ -32,23 +32,19 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
   const audioRef = useRef(null)
   const { ref: musicRef, inView: musicInView } = useInView({ threshold: 0.5 })
   const [audioSrc, setAudioSrc] = useState(null)
-  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
+  const ytMusicId = currentPost.music_url ? getYouTubeId(currentPost.music_url) : null
 
-  // YouTube URL → backend proxy (CORS sorunsuz), değilse direkt çal
+  // Direkt ses dosyası (Supabase) için audioSrc ayarla; YouTube → iframe ile çalınır
   useEffect(() => {
-    if (!currentPost.music_url) return
-    const ytId = getYouTubeId(currentPost.music_url)
-    if (!ytId) { setAudioSrc(currentPost.music_url); return }
-    setAudioSrc(`${BACKEND_URL}/music/proxy?url=${encodeURIComponent(currentPost.music_url)}`)
+    if (!currentPost.music_url || ytMusicId) return
+    setAudioSrc(currentPost.music_url)
   }, [currentPost.id])
 
+  // Direkt ses dosyası: görünüm alanına girince otomatik çal
   useEffect(() => {
     if (!audioRef.current || !audioSrc) return
-    if (musicInView) {
-      audioRef.current.play().catch(() => {})
-    } else {
-      audioRef.current.pause()
-    }
+    if (musicInView) audioRef.current.play().catch(() => {})
+    else audioRef.current.pause()
   }, [musicInView, audioSrc])
 
   const isOwner = user?.id === post.user_id
@@ -244,10 +240,20 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
         {/* Music Player */}
         {currentPost.music_url && (
           <div ref={musicRef} className="px-4 pb-2">
-            {audioSrc && (
+            {ytMusicId ? (
+              // YouTube → iframe embed (proxy gerektirmez, her zaman çalışır)
+              <iframe
+                src={`https://www.youtube.com/embed/${ytMusicId}?controls=1&modestbranding=1&rel=0`}
+                className="w-full rounded-lg"
+                style={{ height: '80px', border: 'none' }}
+                allow="encrypted-media"
+                loading="lazy"
+              />
+            ) : audioSrc ? (
+              // Direkt ses dosyası (Supabase mp3 vb.)
               <audio ref={audioRef} src={audioSrc} loop controls
                 className="w-full h-8" style={{ colorScheme: 'dark' }} />
-            )}
+            ) : null}
           </div>
         )}
 
