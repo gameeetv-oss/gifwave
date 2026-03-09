@@ -31,19 +31,55 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
 
   const audioRef = useRef(null)
   const ytIframeRef = useRef(null)
-  const { ref: musicRef, inView: musicInView } = useInView({ threshold: 0.3 })
+  const { ref: musicRef, inView: musicInView } = useInView({ threshold: 0.4 })
   const ytMusicId = currentPost.music_url ? getYouTubeId(currentPost.music_url) : null
-  const [ytLoaded, setYtLoaded] = useState(false)   // iframe DOM'a eklendi mi
+  const [ytReady, setYtReady] = useState(false)
   const [ytPlaying, setYtPlaying] = useState(false)
   const [ytTitle, setYtTitle] = useState('YouTube Müziği')
   const [audioSrc, setAudioSrc] = useState(null)
 
-  // YouTube başlığını oEmbed ile al (ücretsiz, auth yok)
+  // YouTube başlığını oEmbed ile al
   useEffect(() => {
     if (!ytMusicId) return
     fetch(`https://www.youtube.com/oembed?url=https://youtube.com/watch?v=${ytMusicId}&format=json`)
       .then(r => r.json()).then(d => { if (d.title) setYtTitle(d.title) }).catch(() => {})
   }, [ytMusicId])
+
+  // YouTube IFrame API mesajlarını dinle
+  useEffect(() => {
+    if (!ytMusicId) return
+    function onMsg(e) {
+      if (!e.data) return
+      try {
+        const d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data
+        if (d.event === 'onReady') setYtReady(true)
+        if (d.event === 'infoDelivery' && d.info) {
+          if (d.info.playerState === 1) setYtPlaying(true)
+          if (d.info.playerState === 2 || d.info.playerState === 0) setYtPlaying(false)
+        }
+      } catch {}
+    }
+    window.addEventListener('message', onMsg)
+    return () => window.removeEventListener('message', onMsg)
+  }, [ytMusicId])
+
+  // Görünüm alanına girince çal, çıkınca durdur
+  useEffect(() => {
+    if (!ytReady) return
+    if (musicInView) { ytCmd('playVideo'); setYtPlaying(true) }
+    else { ytCmd('pauseVideo'); setYtPlaying(false) }
+  }, [musicInView, ytReady])
+
+  function ytCmd(func) {
+    ytIframeRef.current?.contentWindow?.postMessage(
+      JSON.stringify({ event: 'command', func, args: [] }), '*'
+    )
+  }
+
+  function toggleYt() {
+    if (ytPlaying) { ytCmd('pauseVideo'); setYtPlaying(false) }
+    else { ytCmd('playVideo'); setYtPlaying(true) }
+  }
 
   // Direkt ses dosyası (Supabase mp3 vb.)
   useEffect(() => {
@@ -57,29 +93,6 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
     if (musicInView) audioRef.current.play().catch(() => {})
     else audioRef.current.pause()
   }, [musicInView, audioSrc])
-
-  // YouTube: alanın dışına çıkınca durdur
-  useEffect(() => {
-    if (!ytPlaying || musicInView) return
-    ytCommand('pauseVideo')
-    setYtPlaying(false)
-  }, [musicInView])
-
-  function ytCommand(func) {
-    ytIframeRef.current?.contentWindow?.postMessage(
-      JSON.stringify({ event: 'command', func, args: [] }), '*'
-    )
-  }
-
-  function toggleYt() {
-    if (!ytLoaded) {
-      setYtLoaded(true)   // iframe DOM'a eklenir, autoplay=1 ile başlar
-      setYtPlaying(true)
-      return
-    }
-    if (ytPlaying) { ytCommand('pauseVideo'); setYtPlaying(false) }
-    else { ytCommand('playVideo'); setYtPlaying(true) }
-  }
 
   const isOwner = user?.id === post.user_id
 
@@ -276,16 +289,15 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
           <div ref={musicRef} className="px-4 pb-3">
             {ytMusicId ? (
               <>
-                {/* Gizli YouTube iframe — sadece ses çalar, görünmez */}
-                {ytLoaded && (
-                  <iframe
-                    ref={ytIframeRef}
-                    src={`https://www.youtube.com/embed/${ytMusicId}?enablejsapi=1&autoplay=1&controls=0`}
-                    style={{ position: 'fixed', top: '-9999px', left: '-9999px', width: '1px', height: '1px', opacity: 0, pointerEvents: 'none' }}
-                    allow="autoplay; encrypted-media"
-                    title="music"
-                  />
-                )}
+                {/* Gizli YouTube iframe — sayfa yüklenince hazır olur, postMessage ile kontrol edilir */}
+                <iframe
+                  ref={ytIframeRef}
+                  src={`https://www.youtube.com/embed/${ytMusicId}?enablejsapi=1&autoplay=0&controls=0&mute=0`}
+                  style={{ position: 'fixed', top: '-9999px', left: '-9999px', width: '1px', height: '1px', opacity: 0, pointerEvents: 'none' }}
+                  allow="autoplay; encrypted-media"
+                  title="music"
+                  loading="lazy"
+                />
                 {/* Custom oynatıcı UI */}
                 <div className="flex items-center gap-3 bg-[#12121e] border border-[#2a2a3f] rounded-xl px-3 py-2.5">
                   <button onClick={toggleYt}
