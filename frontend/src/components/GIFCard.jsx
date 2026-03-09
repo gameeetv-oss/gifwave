@@ -36,7 +36,14 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
   const [ytReady, setYtReady] = useState(false)
   const [ytPlaying, setYtPlaying] = useState(false)
   const [ytTitle, setYtTitle] = useState('YouTube Müziği')
+  // iframe yalnızca kart görünüme girince oluşturulur (performans)
+  const [ytMounted, setYtMounted] = useState(false)
   const [audioSrc, setAudioSrc] = useState(null)
+
+  // Kart görünüme girince iframe'i bir kez oluştur
+  useEffect(() => {
+    if (musicInView && ytMusicId && !ytMounted) setYtMounted(true)
+  }, [musicInView, ytMusicId])
 
   // YouTube başlığını oEmbed ile al
   useEffect(() => {
@@ -53,9 +60,8 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
       try {
         const d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data
         if (d.event === 'onReady') setYtReady(true)
-        if (d.event === 'infoDelivery' && d.info) {
-          if (d.info.playerState === 1) setYtPlaying(true)
-          if (d.info.playerState === 2 || d.info.playerState === 0) setYtPlaying(false)
+        if (d.event === 'infoDelivery' && d.info?.playerState !== undefined) {
+          setYtPlaying(d.info.playerState === 1)
         }
       } catch {}
     }
@@ -63,22 +69,30 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
     return () => window.removeEventListener('message', onMsg)
   }, [ytMusicId])
 
-  // Görünüm alanına girince çal, çıkınca durdur
+  // Görünüme girince unmute (iframe mute=1&autoplay=1 ile başlar), çıkınca mute+pause
   useEffect(() => {
     if (!ytReady) return
-    if (musicInView) { ytCmd('playVideo'); setYtPlaying(true) }
-    else { ytCmd('pauseVideo'); setYtPlaying(false) }
+    if (musicInView) {
+      ytCmd('unMute')
+      ytCmd('setVolume', [100])
+      ytCmd('playVideo')
+      setYtPlaying(true)
+    } else {
+      ytCmd('mute')
+      ytCmd('pauseVideo')
+      setYtPlaying(false)
+    }
   }, [musicInView, ytReady])
 
-  function ytCmd(func) {
+  function ytCmd(func, args = []) {
     ytIframeRef.current?.contentWindow?.postMessage(
-      JSON.stringify({ event: 'command', func, args: [] }), '*'
+      JSON.stringify({ event: 'command', func, args }), '*'
     )
   }
 
   function toggleYt() {
-    if (ytPlaying) { ytCmd('pauseVideo'); setYtPlaying(false) }
-    else { ytCmd('playVideo'); setYtPlaying(true) }
+    if (ytPlaying) { ytCmd('mute'); ytCmd('pauseVideo'); setYtPlaying(false) }
+    else { ytCmd('unMute'); ytCmd('setVolume', [100]); ytCmd('playVideo'); setYtPlaying(true) }
   }
 
   // Direkt ses dosyası (Supabase mp3 vb.)
@@ -289,15 +303,17 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
           <div ref={musicRef} className="px-4 pb-3">
             {ytMusicId ? (
               <>
-                {/* Gizli YouTube iframe — sayfa yüklenince hazır olur, postMessage ile kontrol edilir */}
-                <iframe
-                  ref={ytIframeRef}
-                  src={`https://www.youtube.com/embed/${ytMusicId}?enablejsapi=1&autoplay=0&controls=0&mute=0`}
-                  style={{ position: 'fixed', top: '-9999px', left: '-9999px', width: '1px', height: '1px', opacity: 0, pointerEvents: 'none' }}
-                  allow="autoplay; encrypted-media"
-                  title="music"
-                  loading="lazy"
-                />
+                {/* Gizli YouTube iframe — mute=1&autoplay=1 ile başlar (muted autoplay her zaman izinli),
+                    görünüme girince unMute() ile ses açılır */}
+                {ytMounted && (
+                  <iframe
+                    ref={ytIframeRef}
+                    src={`https://www.youtube.com/embed/${ytMusicId}?enablejsapi=1&autoplay=1&mute=1&controls=0&playsinline=1`}
+                    style={{ position: 'fixed', top: '-9999px', left: '-9999px', width: '1px', height: '1px', border: 'none' }}
+                    allow="autoplay; encrypted-media"
+                    title="yt-music"
+                  />
+                )}
                 {/* Custom oynatıcı UI */}
                 <div className="flex items-center gap-3 bg-[#12121e] border border-[#2a2a3f] rounded-xl px-3 py-2.5">
                   <button onClick={toggleYt}
