@@ -164,55 +164,67 @@ async def proxy_music(url: str = Query(...)):
 
 @app.post("/music/extract")
 async def extract_music(url: str = Query(...)):
-    """YouTube URL'den sesi çıkarır, Supabase'e yükler, public URL döndürür."""
+    """YouTube ses stream URL'sini al (download=False), httpx ile indir, Supabase'e yükle."""
     import yt_dlp
 
     if not SUPABASE_SERVICE_KEY:
         raise HTTPException(status_code=500, detail="SUPABASE_SERVICE_ROLE_KEY eksik")
 
-    with tempfile.TemporaryDirectory() as tmpdir:
+    # download=False ile stream URL al — bot tespiti tetiklenmiyor (proxy gibi)
+    def get_stream_info():
         ydl_opts = {
-            "format": "bestaudio/best",
-            "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "128"}],
-            "outtmpl": os.path.join(tmpdir, "%(id)s.%(ext)s"),
+            "format": "bestaudio[ext=m4a]/bestaudio/best",
             "quiet": True,
             "no_warnings": True,
             "extractor_args": {"youtube": {"player_client": ["android"]}},
         }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            title = info.get("title", "Müzik")
+            video_id = info.get("id", "unknown")
+            formats = info.get("formats", [info])
+            audio = [f for f in formats if f.get("vcodec") == "none" and f.get("acodec") != "none"]
+            if audio:
+                best = sorted(audio, key=lambda f: f.get("abr") or 0, reverse=True)[0]
+                return best["url"], best.get("http_headers", {}), best.get("ext", "m4a"), title, video_id
+            return info.get("url", ""), {}, "m4a", title, video_id
 
-        try:
-            def download():
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    return ydl.extract_info(url, download=True)
+    try:
+        stream_url, yt_headers, ext, title, video_id = await asyncio.get_event_loop().run_in_executor(None, get_stream_info)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"İndirme hatası: {str(e)[:200]}")
 
-            info = await asyncio.get_event_loop().run_in_executor(None, download)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"İndirme hatası: {str(e)[:120]}")
+    if not stream_url:
+        raise HTTPException(status_code=400, detail="Ses URL'si alınamadı")
 
-        video_id = info.get("id", "unknown")
-        title = info.get("title", "Müzik")
+    req_headers = {}
+    if yt_headers.get("User-Agent"):
+        req_headers["User-Agent"] = yt_headers["User-Agent"]
 
-        mp3_files = [f for f in os.listdir(tmpdir) if f.endswith(".mp3")]
-        if not mp3_files:
-            raise HTTPException(status_code=500, detail="Ses dosyası oluşturulamadı")
+    # httpx ile audio verisini indir
+    try:
+        async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
+            audio_resp = await client.get(stream_url, headers=req_headers)
+            audio_data = audio_resp.content
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ses indirme hatası: {str(e)[:120]}")
 
-        audio_path = os.path.join(tmpdir, mp3_files[0])
-        with open(audio_path, "rb") as f:
-            audio_data = f.read()
+    mime_map = {"m4a": "audio/mp4", "webm": "audio/webm", "mp3": "audio/mpeg", "ogg": "audio/ogg"}
+    mime = mime_map.get(ext, "audio/mp4")
 
-        filename = f"yt_{video_id}_{int(time.time())}.mp3"
-        async with httpx.AsyncClient(timeout=60) as client:
-            res = await client.post(
-                f"{SUPABASE_URL}/storage/v1/object/music/{filename}",
-                headers={"Authorization": f"Bearer {SUPABASE_SERVICE_KEY}", "Content-Type": "audio/mpeg"},
-                content=audio_data,
-            )
+    filename = f"yt_{video_id}_{int(time.time())}.{ext}"
+    async with httpx.AsyncClient(timeout=60) as client:
+        res = await client.post(
+            f"{SUPABASE_URL}/storage/v1/object/music/{filename}",
+            headers={"Authorization": f"Bearer {SUPABASE_SERVICE_KEY}", "Content-Type": mime},
+            content=audio_data,
+        )
 
-        if res.status_code not in (200, 201):
-            raise HTTPException(status_code=500, detail=f"Storage hatası: {res.text[:100]}")
+    if res.status_code not in (200, 201):
+        raise HTTPException(status_code=500, detail=f"Storage hatası: {res.text[:100]}")
 
-        public_url = f"{SUPABASE_URL}/storage/v1/object/public/music/{filename}"
-        return {"url": public_url, "title": title}
+    public_url = f"{SUPABASE_URL}/storage/v1/object/public/music/{filename}"
+    return {"url": public_url, "title": title}
 
 
 if __name__ == "__main__":
