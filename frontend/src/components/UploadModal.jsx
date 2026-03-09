@@ -78,22 +78,19 @@ export default function UploadModal({ onClose, onSuccess }) {
     }
   }
 
-  async function extractYTMusic() {
-    if (!ytInput.trim()) return
-    setMusicUploading(true)
+  function addYTMusic() {
+    const trimmed = ytInput.trim()
+    if (!trimmed) return
+    // YouTube URL'ini doğrula
     try {
-      const res = await fetch(`${BACKEND_URL}/music/extract?url=${encodeURIComponent(ytInput.trim())}`, { method: 'POST' })
-      if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Hata') }
-      const { url, title } = await res.json()
-      setMusicUrl(url)
-      setMusicFileName(title)
-      setYtInput('')
-      toast.success('Müzik çıkarıldı!')
-    } catch (err) {
-      toast.error(err.message || 'Müzik çıkarılamadı')
-    } finally {
-      setMusicUploading(false)
-    }
+      const u = new URL(trimmed)
+      const isYT = u.hostname.includes('youtube.com') || u.hostname === 'youtu.be' || u.hostname.includes('music.youtube.com')
+      if (!isYT) { toast.error('Geçersiz YouTube linki'); return }
+    } catch { toast.error('Geçersiz URL'); return }
+    setMusicUrl(trimmed)
+    setMusicFileName('YouTube Müziği')
+    setYtInput('')
+    toast.success('Müzik eklendi!')
   }
 
   async function handleMusicSelect(e) {
@@ -316,13 +313,12 @@ export default function UploadModal({ onClose, onSuccess }) {
                     placeholder="YouTube linki yapıştır..."
                     value={ytInput}
                     onChange={e => setYtInput(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && extractYTMusic()}
+                    onKeyDown={e => e.key === 'Enter' && addYTMusic()}
                   />
-                  <button type="button" onClick={extractYTMusic}
-                    disabled={musicUploading || !ytInput.trim()}
+                  <button type="button" onClick={addYTMusic}
+                    disabled={!ytInput.trim()}
                     className="btn-primary px-3 py-2 text-sm flex-shrink-0 flex items-center gap-1.5">
-                    {musicUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Music className="w-4 h-4" />}
-                    {musicUploading ? 'Çıkarılıyor...' : 'Çıkar'}
+                    <Music className="w-4 h-4" /> Ekle
                   </button>
                 </div>
                 <div className="flex items-center gap-2">

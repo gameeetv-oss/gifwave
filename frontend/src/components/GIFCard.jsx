@@ -39,15 +39,7 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
     if (!currentPost.music_url) return
     const ytId = getYouTubeId(currentPost.music_url)
     if (!ytId) { setAudioSrc(currentPost.music_url); return }
-
-    // Proxy üzerinden çal (backend YouTube CDN'i aktar, CORS sorunu yok)
     setAudioSrc(`${BACKEND_URL}/music/proxy?url=${encodeURIComponent(currentPost.music_url)}`)
-
-    // Arka planda kalıcı kayıt (Supabase'e yükle → DB güncelle → sonraki yüklemede anında çalar)
-    fetch(`${BACKEND_URL}/music/extract?url=${encodeURIComponent(currentPost.music_url)}`, { method: 'POST' })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.url) supabase.from('posts').update({ music_url: d.url }).eq('id', currentPost.id) })
-      .catch(() => {})
   }, [currentPost.id])
 
   useEffect(() => {

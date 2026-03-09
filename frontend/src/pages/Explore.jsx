@@ -198,22 +198,18 @@ export default function Explore() {
     setEditYtInput('')
   }
 
-  async function extractEditYTMusic() {
-    if (!editYtInput.trim()) return
-    setEditMusicUploading(true)
+  function addEditYTMusic() {
+    const trimmed = editYtInput.trim()
+    if (!trimmed) return
     try {
-      const res = await fetch(`${BACKEND_URL}/music/extract?url=${encodeURIComponent(editYtInput.trim())}`, { method: 'POST' })
-      if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Hata') }
-      const { url, title } = await res.json()
-      setEditMusicUrl(url)
-      setEditMusicFileName(title)
-      setEditYtInput('')
-      toast.success('Müzik çıkarıldı!')
-    } catch (err) {
-      toast.error(err.message || 'Müzik çıkarılamadı')
-    } finally {
-      setEditMusicUploading(false)
-    }
+      const u = new URL(trimmed)
+      const isYT = u.hostname.includes('youtube.com') || u.hostname === 'youtu.be' || u.hostname.includes('music.youtube.com')
+      if (!isYT) { toast.error('Geçersiz YouTube linki'); return }
+    } catch { toast.error('Geçersiz URL'); return }
+    setEditMusicUrl(trimmed)
+    setEditMusicFileName('YouTube Müziği')
+    setEditYtInput('')
+    toast.success('Müzik eklendi!')
   }
 
   async function handleEditMusicSelect(e) {
@@ -346,13 +342,12 @@ export default function Explore() {
                     placeholder="YouTube linki yapıştır..."
                     value={editYtInput}
                     onChange={e => setEditYtInput(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && extractEditYTMusic()}
+                    onKeyDown={e => e.key === 'Enter' && addEditYTMusic()}
                   />
-                  <button type="button" onClick={extractEditYTMusic}
-                    disabled={editMusicUploading || !editYtInput.trim()}
+                  <button type="button" onClick={addEditYTMusic}
+                    disabled={!editYtInput.trim()}
                     className="btn-primary px-3 py-2 text-sm flex-shrink-0 flex items-center gap-1.5">
-                    {editMusicUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Music className="w-4 h-4" />}
-                    {editMusicUploading ? 'Çıkarılıyor...' : 'Çıkar'}
+                    <Music className="w-4 h-4" /> Ekle
                   </button>
                 </div>
                 <div className="flex items-center gap-2">
