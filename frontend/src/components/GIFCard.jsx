@@ -352,27 +352,44 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
         {currentPost.music_url && (
           <div ref={musicRef} className="px-4 pb-3">
             {ytMusicId ? (
-              <>
-                {/* YT.Player bu div'i gizli bir iframe'e dönüştürür */}
-                {ytMounted && (
-                  <div
-                    ref={ytContainerRef}
-                    style={{ position: 'fixed', left: '-400px', top: '50%', width: '200px', height: '112px', pointerEvents: 'none' }}
+              isMobile ? (
+                // Mobil (iOS dahil): native YouTube embed — JS ile iframe kontrolü iOS'ta çalışmıyor
+                <div className="bg-[#12121e] border border-[#2a2a3f] rounded-xl overflow-hidden">
+                  <div className="flex items-center gap-2 px-3 py-2">
+                    <Music className="w-3.5 h-3.5 text-brand-400 flex-shrink-0" />
+                    <p className="text-xs text-gray-300 truncate">{ytTitle || 'YouTube Müziği'}</p>
+                  </div>
+                  <iframe
+                    src={`https://www.youtube.com/embed/${ytMusicId}?autoplay=0&mute=0&controls=1&playsinline=1&rel=0&modestbranding=1`}
+                    allow="autoplay; encrypted-media"
+                    allowFullScreen
+                    className="w-full"
+                    style={{ height: '40px', border: 'none', display: 'block' }}
+                    title={ytTitle || 'music'}
                   />
-                )}
-                {/* Custom oynatıcı UI */}
-                <div className="flex items-center gap-3 bg-[#12121e] border border-[#2a2a3f] rounded-xl px-3 py-2.5">
-                  <button onClick={toggleYt}
-                    className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-brand-500 hover:bg-brand-600 rounded-full transition-colors">
-                    {ytPlaying
-                      ? <Pause className="w-3.5 h-3.5 text-white" />
-                      : <Play className="w-3.5 h-3.5 text-white fill-white" />}
-                  </button>
-                  <Music className="w-4 h-4 text-brand-400 flex-shrink-0" />
-                  <p className="text-xs text-gray-300 truncate flex-1">{ytTitle}</p>
-                  {!ytReady && <Loader2 className="w-3.5 h-3.5 text-gray-600 animate-spin flex-shrink-0" />}
                 </div>
-              </>
+              ) : (
+                // Desktop: gizli YT.Player API + custom UI + viewport auto-play
+                <>
+                  {ytMounted && (
+                    <div
+                      ref={ytContainerRef}
+                      style={{ position: 'fixed', left: '-400px', top: '50%', width: '200px', height: '112px', pointerEvents: 'none' }}
+                    />
+                  )}
+                  <div className="flex items-center gap-3 bg-[#12121e] border border-[#2a2a3f] rounded-xl px-3 py-2.5">
+                    <button onClick={toggleYt}
+                      className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-brand-500 hover:bg-brand-600 rounded-full transition-colors">
+                      {ytPlaying
+                        ? <Pause className="w-3.5 h-3.5 text-white" />
+                        : <Play className="w-3.5 h-3.5 text-white fill-white" />}
+                    </button>
+                    <Music className="w-4 h-4 text-brand-400 flex-shrink-0" />
+                    <p className="text-xs text-gray-300 truncate flex-1">{ytTitle}</p>
+                    {!ytReady && <Loader2 className="w-3.5 h-3.5 text-gray-600 animate-spin flex-shrink-0" />}
+                  </div>
+                </>
+              )
             ) : audioSrc ? (
               <audio ref={audioRef} src={audioSrc} loop controls
                 className="w-full h-8" style={{ colorScheme: 'dark' }} />
