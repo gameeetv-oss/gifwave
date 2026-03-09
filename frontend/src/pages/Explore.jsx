@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Search, TrendingUp, Hash, Loader2, Repeat2, Pencil, X, Check, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, TrendingUp, Hash, Loader2, Repeat2, Pencil, X, Check, ChevronLeft, ChevronRight, Music, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -40,6 +40,11 @@ export default function Explore() {
   const [editOverlay, setEditOverlay] = useState('')
   const [editShowOverlay, setEditShowOverlay] = useState(false)
   const [editSaving, setEditSaving] = useState(false)
+  const [editMusicUrl, setEditMusicUrl] = useState('')
+  const [editMusicFileName, setEditMusicFileName] = useState('')
+  const [editMusicUploading, setEditMusicUploading] = useState(false)
+  const [editYtInput, setEditYtInput] = useState('')
+  const editMusicFileRef = useRef()
 
   const searchInputRef = useRef()
   const gifGridRef = useRef()
@@ -188,6 +193,43 @@ export default function Explore() {
     setEditCaption(gif.title || '')
     setEditOverlay('')
     setEditShowOverlay(false)
+    setEditMusicUrl('')
+    setEditMusicFileName('')
+    setEditYtInput('')
+  }
+
+  async function extractEditYTMusic() {
+    if (!editYtInput.trim()) return
+    setEditMusicUploading(true)
+    try {
+      const res = await fetch(`${BACKEND_URL}/music/extract?url=${encodeURIComponent(editYtInput.trim())}`, { method: 'POST' })
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Hata') }
+      const { url, title } = await res.json()
+      setEditMusicUrl(url)
+      setEditMusicFileName(title)
+      setEditYtInput('')
+      toast.success('Müzik çıkarıldı!')
+    } catch (err) {
+      toast.error(err.message || 'Müzik çıkarılamadı')
+    } finally {
+      setEditMusicUploading(false)
+    }
+  }
+
+  async function handleEditMusicSelect(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    if (!file.type.startsWith('audio/')) { toast.error('Ses dosyası seçmelisin (mp3, ogg, wav...)'); return }
+    if (file.size > 15 * 1024 * 1024) { toast.error('Maks 15MB'); return }
+    setEditMusicUploading(true)
+    const path = `${user.id}/${Date.now()}_${file.name}`
+    const { error } = await supabase.storage.from('music').upload(path, file, { contentType: file.type })
+    if (error) { toast.error('Müzik yükleme hatası'); setEditMusicUploading(false); return }
+    const { data: { publicUrl } } = supabase.storage.from('music').getPublicUrl(path)
+    setEditMusicUrl(publicUrl)
+    setEditMusicFileName(file.name)
+    setEditMusicUploading(false)
+    toast.success('Müzik yüklendi!')
   }
 
   async function saveEditPost() {
@@ -199,6 +241,7 @@ export default function Explore() {
       caption: editCaption || null,
       text_overlay: editOverlay || null,
       show_overlay: editOverlay ? editShowOverlay : false,
+      music_url: editMusicUrl || null,
       tags: [],
       source: 'giphy',
       likes_count: 0,
@@ -284,8 +327,49 @@ export default function Explore() {
                 GIF üzerinde göster
               </label>
             )}
+
+            {/* Müzik */}
+            <input ref={editMusicFileRef} type="file" accept="audio/*" className="hidden" onChange={handleEditMusicSelect} />
+            {editMusicFileName ? (
+              <div className="flex items-center gap-3 bg-[#12121e] border border-brand-500/30 rounded-xl px-3 py-2">
+                <Music className="w-4 h-4 text-brand-400 flex-shrink-0" />
+                <p className="text-sm text-gray-300 flex-1 truncate">{editMusicFileName}</p>
+                <button onClick={() => { setEditMusicUrl(''); setEditMusicFileName('') }} className="text-gray-500 hover:text-red-400 transition-colors">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <input
+                    className="input flex-1 text-sm"
+                    placeholder="YouTube linki yapıştır..."
+                    value={editYtInput}
+                    onChange={e => setEditYtInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && extractEditYTMusic()}
+                  />
+                  <button type="button" onClick={extractEditYTMusic}
+                    disabled={editMusicUploading || !editYtInput.trim()}
+                    className="btn-primary px-3 py-2 text-sm flex-shrink-0 flex items-center gap-1.5">
+                    {editMusicUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Music className="w-4 h-4" />}
+                    {editMusicUploading ? 'Çıkarılıyor...' : 'Çıkar'}
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-px bg-[#2a2a3f]" />
+                  <span className="text-xs text-gray-600">veya</span>
+                  <div className="flex-1 h-px bg-[#2a2a3f]" />
+                </div>
+                <button type="button" onClick={() => editMusicFileRef.current?.click()} disabled={editMusicUploading}
+                  className="w-full flex items-center gap-2 px-3 py-2 bg-[#12121e] border border-dashed border-[#3a3a5c] rounded-xl text-sm text-gray-500 hover:border-brand-500 hover:text-brand-400 transition-colors">
+                  <Music className="w-4 h-4" />
+                  MP3 / OGG / WAV dosyası yükle
+                </button>
+              </div>
+            )}
+
             <div className="flex gap-2 pt-1">
-              <button onClick={saveEditPost} disabled={editSaving}
+              <button onClick={saveEditPost} disabled={editSaving || editMusicUploading}
                 className="btn-primary flex-1 flex items-center justify-center gap-2">
                 {editSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Paylaş
               </button>
