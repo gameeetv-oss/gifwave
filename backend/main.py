@@ -45,30 +45,25 @@ def health():
 
 
 @app.get("/giphy/trending")
-async def trending(limit: int = Query(24, le=50)):
+async def trending(limit: int = Query(24, le=50), pos: str = Query("")):
+    params = {"key": TENOR_KEY, "limit": limit, "media_filter": "minimal", "locale": "tr_TR"}
+    if pos:
+        params["pos"] = pos
     async with httpx.AsyncClient(timeout=10) as client:
-        res = await client.get(f"{TENOR_BASE}/trending", params={
-            "key": TENOR_KEY,
-            "limit": limit,
-            "media_filter": "minimal",
-            "locale": "tr_TR"
-        })
+        res = await client.get(f"{TENOR_BASE}/trending", params=params)
     data = res.json()
-    return {"gifs": parse_tenor(data.get("results", []))}
+    return {"gifs": parse_tenor(data.get("results", [])), "next": data.get("next", "")}
 
 
 @app.get("/giphy/search")
-async def search(q: str = Query(...), limit: int = Query(20, le=50)):
+async def search(q: str = Query(...), limit: int = Query(20, le=50), pos: str = Query("")):
+    params = {"key": TENOR_KEY, "q": q, "limit": limit, "media_filter": "minimal", "locale": "tr_TR"}
+    if pos:
+        params["pos"] = pos
     async with httpx.AsyncClient(timeout=10) as client:
-        res = await client.get(f"{TENOR_BASE}/search", params={
-            "key": TENOR_KEY,
-            "q": q,
-            "limit": limit,
-            "media_filter": "minimal",
-            "locale": "tr_TR"
-        })
+        res = await client.get(f"{TENOR_BASE}/search", params=params)
     data = res.json()
-    return {"gifs": parse_tenor(data.get("results", []))}
+    return {"gifs": parse_tenor(data.get("results", [])), "next": data.get("next", "")}
 
 
 @app.post("/convert")

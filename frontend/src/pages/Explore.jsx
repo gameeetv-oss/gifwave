@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Search, TrendingUp, Hash, Loader2, Repeat2, Pencil, X, Check } from 'lucide-react'
+import { Search, TrendingUp, Hash, Loader2, Repeat2, Pencil, X, Check, ChevronLeft, ChevronRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -20,12 +20,29 @@ export default function Explore() {
   const [giphyResults, setGiphyResults] = useState([])
   const [loading, setLoading] = useState(false)
   const [giphyLoading, setGiphyLoading] = useState(false)
-  const [editGif, setEditGif] = useState(null) // { url, title } — "Ekle ve Düzenle" modali
+
+  // Trending GIF sayfalama
+  const [trendingPage, setTrendingPage] = useState(0)
+  const [trendingCursors, setTrendingCursors] = useState(['']) // cursors[i] = pos for page i
+  const [trendingNext, setTrendingNext] = useState('')
+  const [trendingPageLoading, setTrendingPageLoading] = useState(false)
+
+  // Arama GIF sayfalama
+  const [searchGifPage, setSearchGifPage] = useState(0)
+  const [searchGifCursors, setSearchGifCursors] = useState([''])
+  const [searchGifNext, setSearchGifNext] = useState('')
+  const [searchGifLoading, setSearchGifLoading] = useState(false)
+  const lastSearchQuery = useRef('')
+
+  // Ekle ve Düzenle modali
+  const [editGif, setEditGif] = useState(null)
   const [editCaption, setEditCaption] = useState('')
   const [editOverlay, setEditOverlay] = useState('')
   const [editShowOverlay, setEditShowOverlay] = useState(false)
   const [editSaving, setEditSaving] = useState(false)
+
   const searchInputRef = useRef()
+  const gifGridRef = useRef()
 
   useEffect(() => {
     loadTrending()
@@ -39,11 +56,43 @@ export default function Explore() {
         .select('*, profiles!fk_posts_profiles(username, display_name, avatar_url)')
         .order('likes_count', { ascending: false })
         .limit(10),
-      fetch(`${BACKEND_URL}/giphy/trending`).then(r => r.json()).catch(() => ({ gifs: [] }))
+      fetch(`${BACKEND_URL}/giphy/trending?limit=24`).then(r => r.json()).catch(() => ({ gifs: [], next: '' }))
     ])
     setTrendingPosts(postsRes.data || [])
     setTrendingGiphy(giphyRes.gifs || [])
+    setTrendingNext(giphyRes.next || '')
+    setTrendingPage(0)
+    setTrendingCursors([''])
     setLoading(false)
+  }
+
+  async function goTrendingPage(dir) {
+    const newPage = trendingPage + dir
+    if (newPage < 0) return
+
+    setTrendingPageLoading(true)
+
+    let pos = ''
+    if (dir === 1) {
+      // İleri: trendingNext'i kullan, cursors listesine ekle
+      pos = trendingNext
+      const newCursors = [...trendingCursors]
+      if (!newCursors[newPage]) newCursors[newPage] = pos
+      setTrendingCursors(newCursors)
+    } else {
+      // Geri: cursors'dan al
+      pos = trendingCursors[newPage] || ''
+    }
+
+    const url = `${BACKEND_URL}/giphy/trending?limit=24${pos ? `&pos=${encodeURIComponent(pos)}` : ''}`
+    const data = await fetch(url).then(r => r.json()).catch(() => ({ gifs: [], next: '' }))
+    setTrendingGiphy(data.gifs || [])
+    setTrendingNext(data.next || '')
+    setTrendingPage(newPage)
+    setTrendingPageLoading(false)
+
+    // GIF grid'e scroll et
+    gifGridRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   async function loadTrendingTags() {
@@ -61,6 +110,10 @@ export default function Explore() {
     setLoading(true)
     setGiphyLoading(true)
     setTab('search')
+    setSearchGifPage(0)
+    setSearchGifCursors([''])
+    setSearchGifNext('')
+    lastSearchQuery.current = trimmed
 
     // Platform araması
     if (trimmed.startsWith('#')) {
@@ -77,12 +130,41 @@ export default function Explore() {
     }
     setLoading(false)
 
-    // GIPHY araması (eş zamanlı)
-    fetch(`${BACKEND_URL}/giphy/search?q=${encodeURIComponent(trimmed.replace(/^#/, ''))}`)
+    // GIPHY araması
+    const gifQ = trimmed.replace(/^#/, '')
+    fetch(`${BACKEND_URL}/giphy/search?q=${encodeURIComponent(gifQ)}&limit=20`)
       .then(r => r.json())
-      .then(d => setGiphyResults(d.gifs || []))
+      .then(d => {
+        setGiphyResults(d.gifs || [])
+        setSearchGifNext(d.next || '')
+      })
       .catch(() => {})
       .finally(() => setGiphyLoading(false))
+  }
+
+  async function goSearchGifPage(dir) {
+    const newPage = searchGifPage + dir
+    if (newPage < 0) return
+
+    setSearchGifLoading(true)
+
+    let pos = ''
+    if (dir === 1) {
+      pos = searchGifNext
+      const newCursors = [...searchGifCursors]
+      if (!newCursors[newPage]) newCursors[newPage] = pos
+      setSearchGifCursors(newCursors)
+    } else {
+      pos = searchGifCursors[newPage] || ''
+    }
+
+    const gifQ = lastSearchQuery.current.replace(/^#/, '')
+    const url = `${BACKEND_URL}/giphy/search?q=${encodeURIComponent(gifQ)}&limit=20${pos ? `&pos=${encodeURIComponent(pos)}` : ''}`
+    const data = await fetch(url).then(r => r.json()).catch(() => ({ gifs: [], next: '' }))
+    setGiphyResults(data.gifs || [])
+    setSearchGifNext(data.next || '')
+    setSearchGifPage(newPage)
+    setSearchGifLoading(false)
   }
 
   async function repostGiphy(gif) {
@@ -133,6 +215,44 @@ export default function Explore() {
 
   const isUserSearch = tab === 'search' && !query.startsWith('#')
 
+  function GifGrid({ gifs, cols = 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4' }) {
+    return (
+      <div className={`grid ${cols} gap-2`}>
+        {gifs.map(gif => (
+          <div key={gif.id} className="relative group rounded-xl overflow-hidden bg-black/20 aspect-square">
+            <img src={gif.preview} alt={gif.title} className="w-full h-full object-cover" loading="lazy" />
+            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-2">
+              <button onClick={() => repostGiphy(gif)}
+                className="flex items-center gap-1.5 bg-brand-500 hover:bg-brand-600 text-white text-xs px-3 py-1.5 rounded-lg transition-colors w-full justify-center">
+                <Repeat2 className="w-3.5 h-3.5" /> Ekle
+              </button>
+              <button onClick={() => openEditModal(gif)}
+                className="flex items-center gap-1.5 bg-[#2a2a4a] hover:bg-[#3a3a5c] border border-[#3a3a5c] text-white text-xs px-3 py-1.5 rounded-lg transition-colors w-full justify-center">
+                <Pencil className="w-3.5 h-3.5" /> Ekle ve Düzenle
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  function Pagination({ page, onPrev, onNext, hasNext, loading: pgLoading }) {
+    return (
+      <div className="flex items-center justify-center gap-3 mt-4">
+        <button onClick={onPrev} disabled={page === 0 || pgLoading}
+          className="flex items-center gap-1 px-4 py-2 rounded-xl bg-[#1a1a2e] border border-[#3a3a5c] text-sm text-gray-300 hover:text-white hover:border-brand-500/50 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+          <ChevronLeft className="w-4 h-4" /> Önceki
+        </button>
+        <span className="text-sm text-gray-500">Sayfa {page + 1}</span>
+        <button onClick={onNext} disabled={!hasNext || pgLoading}
+          className="flex items-center gap-1 px-4 py-2 rounded-xl bg-[#1a1a2e] border border-[#3a3a5c] text-sm text-gray-300 hover:text-white hover:border-brand-500/50 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+          {pgLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Sonraki <ChevronRight className="w-4 h-4" /></>}
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-6">
 
@@ -144,8 +264,6 @@ export default function Explore() {
               <h2 className="font-bold text-white text-lg">GIF Düzenle & Paylaş</h2>
               <button onClick={() => setEditGif(null)} className="text-gray-500 hover:text-white"><X className="w-5 h-5" /></button>
             </div>
-
-            {/* GIF Önizleme */}
             <div className="relative rounded-xl overflow-hidden bg-black/30">
               <img src={editGif.url} alt={editGif.title} className="w-full max-h-64 object-contain" />
               {editOverlay && editShowOverlay && (
@@ -156,52 +274,35 @@ export default function Explore() {
                 </div>
               )}
             </div>
-
-            {/* Açıklama */}
-            <input
-              className="input text-sm"
-              placeholder="Açıklama (opsiyonel)..."
-              value={editCaption}
-              onChange={e => setEditCaption(e.target.value)}
-            />
-
-            {/* Meme yazısı */}
-            <input
-              className="input text-sm"
-              placeholder="GIF üzerine yazı (meme tarzı)..."
-              value={editOverlay}
-              onChange={e => setEditOverlay(e.target.value)}
-            />
+            <input className="input text-sm" placeholder="Açıklama (opsiyonel)..."
+              value={editCaption} onChange={e => setEditCaption(e.target.value)} />
+            <input className="input text-sm" placeholder="GIF üzerine yazı (meme tarzı)..."
+              value={editOverlay} onChange={e => setEditOverlay(e.target.value)} />
             {editOverlay && (
               <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
                 <input type="checkbox" checked={editShowOverlay} onChange={e => setEditShowOverlay(e.target.checked)} />
                 GIF üzerinde göster
               </label>
             )}
-
             <div className="flex gap-2 pt-1">
               <button onClick={saveEditPost} disabled={editSaving}
                 className="btn-primary flex-1 flex items-center justify-center gap-2">
-                {editSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                Paylaş
+                {editSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Paylaş
               </button>
               <button onClick={() => setEditGif(null)} className="btn-ghost px-4">İptal</button>
             </div>
           </div>
         </div>
       )}
+
       {/* Arama */}
       <div className="flex gap-2 mb-6">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-          <input
-            ref={searchInputRef}
-            className="input pl-9"
-            placeholder="GIF ara (GIPHY), kullanıcı veya #tag..."
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleSearch()}
-          />
+          <input ref={searchInputRef} className="input pl-9"
+            placeholder="GIF ara, kullanıcı veya #tag..."
+            value={query} onChange={e => setQuery(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleSearch()} />
         </div>
         <button onClick={() => handleSearch()} className="btn-primary px-5">Ara</button>
       </div>
@@ -227,29 +328,21 @@ export default function Explore() {
           {(giphyLoading || giphyResults.length > 0) && (
             <div>
               <h2 className="font-semibold text-gray-300 mb-3 flex items-center gap-2">
-                <Search className="w-4 h-4 text-brand-400" /> GIPHY Sonuçları
+                <Search className="w-4 h-4 text-brand-400" /> GIF Sonuçları
               </h2>
               {giphyLoading ? (
                 <div className="flex justify-center py-6"><Loader2 className="w-6 h-6 animate-spin text-brand-400" /></div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {giphyResults.map(gif => (
-                    <div key={gif.id} className="relative group rounded-xl overflow-hidden bg-black/20 aspect-square">
-                      <img src={gif.preview} alt={gif.title} className="w-full h-full object-cover" loading="lazy" />
-                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-2">
-                        <p className="text-xs text-white text-center line-clamp-2">{gif.title}</p>
-                        <button onClick={() => repostGiphy(gif)}
-                          className="flex items-center gap-1.5 bg-brand-500 hover:bg-brand-600 text-white text-xs px-3 py-1.5 rounded-lg transition-colors w-full justify-center">
-                          <Repeat2 className="w-3.5 h-3.5" /> Profilime Ekle
-                        </button>
-                        <button onClick={() => openEditModal(gif)}
-                          className="flex items-center gap-1.5 bg-[#2a2a4a] hover:bg-[#3a3a5c] border border-[#3a3a5c] text-white text-xs px-3 py-1.5 rounded-lg transition-colors w-full justify-center">
-                          <Pencil className="w-3.5 h-3.5" /> Ekle ve Düzenle
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <>
+                  <GifGrid gifs={giphyResults} cols="grid-cols-2 sm:grid-cols-3" />
+                  <Pagination
+                    page={searchGifPage}
+                    onPrev={() => goSearchGifPage(-1)}
+                    onNext={() => goSearchGifPage(1)}
+                    hasNext={!!searchGifNext}
+                    loading={searchGifLoading}
+                  />
+                </>
               )}
             </div>
           )}
@@ -296,27 +389,22 @@ export default function Explore() {
           ) : (
             <>
               {trendingGiphy.length > 0 && (
-                <div>
+                <div ref={gifGridRef}>
                   <h2 className="font-semibold text-gray-300 mb-3 flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-brand-400" /> GIPHY Trending
+                    <TrendingUp className="w-4 h-4 text-brand-400" /> Trending GIF'ler
                   </h2>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                    {trendingGiphy.map(gif => (
-                      <div key={gif.id} className="relative group rounded-xl overflow-hidden bg-black/20 aspect-square">
-                        <img src={gif.preview} alt={gif.title} className="w-full h-full object-cover" loading="lazy" />
-                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-2">
-                          <button onClick={() => repostGiphy(gif)}
-                            className="flex items-center gap-1.5 bg-brand-500 hover:bg-brand-600 text-white text-xs px-3 py-1.5 rounded-lg transition-colors w-full justify-center">
-                            <Repeat2 className="w-3.5 h-3.5" /> Ekle
-                          </button>
-                          <button onClick={() => openEditModal(gif)}
-                            className="flex items-center gap-1.5 bg-[#2a2a4a] hover:bg-[#3a3a5c] border border-[#3a3a5c] text-white text-xs px-3 py-1.5 rounded-lg transition-colors w-full justify-center">
-                            <Pencil className="w-3.5 h-3.5" /> Ekle ve Düzenle
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  {trendingPageLoading ? (
+                    <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-brand-400" /></div>
+                  ) : (
+                    <GifGrid gifs={trendingGiphy} />
+                  )}
+                  <Pagination
+                    page={trendingPage}
+                    onPrev={() => goTrendingPage(-1)}
+                    onNext={() => goTrendingPage(1)}
+                    hasNext={!!trendingNext}
+                    loading={trendingPageLoading}
+                  />
                 </div>
               )}
 
