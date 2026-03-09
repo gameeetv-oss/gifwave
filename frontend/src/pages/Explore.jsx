@@ -209,16 +209,18 @@ export default function Explore() {
     setEditMusicUploading(true)
     try {
       const res = await fetch(`${BACKEND_URL}/music/extract?url=${encodeURIComponent(trimmed)}`, { method: 'POST' })
-      if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Hata') }
+      if (!res.ok) throw new Error('extract_failed')
       const data = await res.json()
       setEditMusicUrl(data.url)
       setEditMusicFileName(data.title || 'YouTube Müziği')
-      setEditYtInput('')
       toast.success('Müzik eklendi!')
-    } catch (err) {
-      toast.error(err.message || 'Müzik indirilemedi')
+    } catch {
+      setEditMusicUrl(trimmed)
+      setEditMusicFileName('YouTube Müziği')
+      toast('Müzik eklendi (masaüstünde çalar)', { icon: '🎵' })
     } finally {
       setEditMusicUploading(false)
+      setEditYtInput('')
     }
   }
 

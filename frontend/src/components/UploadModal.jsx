@@ -89,16 +89,19 @@ export default function UploadModal({ onClose, onSuccess }) {
     setMusicUploading(true)
     try {
       const res = await fetch(`${BACKEND_URL}/music/extract?url=${encodeURIComponent(trimmed)}`, { method: 'POST' })
-      if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Hata') }
+      if (!res.ok) throw new Error('extract_failed')
       const data = await res.json()
       setMusicUrl(data.url)
       setMusicFileName(data.title || 'YouTube Müziği')
-      setYtInput('')
       toast.success('Müzik eklendi!')
-    } catch (err) {
-      toast.error(err.message || 'Müzik indirilemedi')
+    } catch {
+      // Extraction başarısız → YouTube URL olarak kaydet (masaüstünde çalar)
+      setMusicUrl(trimmed)
+      setMusicFileName('YouTube Müziği')
+      toast('Müzik eklendi (masaüstünde çalar)', { icon: '🎵' })
     } finally {
       setMusicUploading(false)
+      setYtInput('')
     }
   }
 
