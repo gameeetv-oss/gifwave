@@ -1,0 +1,11 @@
+{
+  "appId": "com.gifwave.app",
+  "appName": "GifWave",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "backgroundColor": "#0f0f0f"
+  }
+}
