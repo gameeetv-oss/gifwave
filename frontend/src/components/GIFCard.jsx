@@ -8,10 +8,8 @@ import { usePresence } from '../context/PresenceContext'
 import toast from 'react-hot-toast'
 import CommentModal from './CommentModal'
 
-// Mobil cihaz tespiti (touch screen = mobil)
 const isMobile = typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0
 
-// YouTube IFrame API'sini global olarak bir kez yükle
 function loadYTApi() {
   if (window.YT && window.YT.Player) return Promise.resolve()
   if (window._ytApiPromise) return window._ytApiPromise
@@ -24,7 +22,7 @@ function loadYTApi() {
   return window._ytApiPromise
 }
 
-export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete }) {
+export default function GIFCard({ post, onDelete }) {
   const { user, profile: myProfile } = useAuth()
   const { onlineUsers } = usePresence()
   const [liked, setLiked] = useState(post.user_liked || false)
@@ -33,7 +31,6 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
   const [reposted, setReposted] = useState(post.user_reposted || false)
   const [repostCount, setRepostCount] = useState(post.reposts_count || 0)
   const [showComments, setShowComments] = useState(false)
-  const [imgLoaded, setImgLoaded] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
   const [editMode, setEditMode] = useState(false)
   const [editCaption, setEditCaption] = useState(post.caption || '')
@@ -41,97 +38,67 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
   const [showOverlay, setShowOverlay] = useState(post.show_overlay || false)
   const [saving, setSaving] = useState(false)
   const [currentPost, setCurrentPost] = useState(post)
+  const [captionExpanded, setCaptionExpanded] = useState(false)
 
   useEffect(() => { setLiked(post.user_liked || false) }, [post.user_liked])
   useEffect(() => { setReposted(post.user_reposted || false) }, [post.user_reposted])
 
   // ── Müzik ──────────────────────────────────────────────────
   const audioRef = useRef(null)
-  const ytContainerRef = useRef(null)    // YT.Player bu div'i iframe'e dönüştürür
-  const ytPlayerRef = useRef(null)       // YT.Player instance
-  const userStartedRef = useRef(false)   // Kullanıcı en az bir kez tıkladı mı (mobil için)
+  const ytContainerRef = useRef(null)
+  const ytPlayerRef = useRef(null)
+  const userStartedRef = useRef(false)
   const { ref: musicRef, inView: musicInView } = useInView({ threshold: 0.3 })
   const ytMusicId = currentPost.music_url ? getYouTubeId(currentPost.music_url) : null
   const [ytReady, setYtReady] = useState(false)
   const [ytPlaying, setYtPlaying] = useState(false)
   const [ytTitle, setYtTitle] = useState('YouTube Müziği')
-  const [ytMounted, setYtMounted] = useState(false)  // container DOM'da var mı
+  const [ytMounted, setYtMounted] = useState(false)
   const [audioSrc, setAudioSrc] = useState(null)
 
-  // Kart görünüme girince container'ı oluştur (bir kez)
   useEffect(() => {
     if (musicInView && ytMusicId && !ytMounted) setYtMounted(true)
   }, [musicInView, ytMusicId])
 
-  // YouTube başlığını oEmbed ile al
   useEffect(() => {
     if (!ytMusicId) return
     fetch(`https://www.youtube.com/oembed?url=https://youtube.com/watch?v=${ytMusicId}&format=json`)
       .then(r => r.json()).then(d => { if (d.title) setYtTitle(d.title) }).catch(() => {})
   }, [ytMusicId])
 
-  // Container mount olduktan sonra YT.Player oluştur
   useEffect(() => {
     if (!ytMounted || !ytMusicId || !ytContainerRef.current) return
     let player
-
     loadYTApi().then(() => {
       if (!ytContainerRef.current) return
       player = new window.YT.Player(ytContainerRef.current, {
-        width: '200',
-        height: '112',
-        videoId: ytMusicId,
-        playerVars: {
-          autoplay: isMobile ? 0 : 1,  // Mobilde autoplay yok (iOS/Android bloklar)
-          mute: 1,                      // Muted autoplay — desktop'ta izinli
-          controls: 0,
-          playsinline: 1,
-          rel: 0,
-          modestbranding: 1,
-        },
+        width: '200', height: '112', videoId: ytMusicId,
+        playerVars: { autoplay: isMobile ? 0 : 1, mute: 1, controls: 0, playsinline: 1, rel: 0, modestbranding: 1 },
         events: {
-          onReady: () => {
-            ytPlayerRef.current = player
-            setYtReady(true)
-          },
-          onStateChange: (e) => {
-            // 1=oynuyor, 2=durduruldu, 0=bitti
-            setYtPlaying(e.data === 1)
-          },
+          onReady: () => { ytPlayerRef.current = player; setYtReady(true) },
+          onStateChange: (e) => { setYtPlaying(e.data === 1) },
         },
       })
     })
-
     return () => {
       if (ytPlayerRef.current) {
         try { ytPlayerRef.current.destroy() } catch {}
-        ytPlayerRef.current = null
-        setYtReady(false)
-        setYtPlaying(false)
+        ytPlayerRef.current = null; setYtReady(false); setYtPlaying(false)
       }
     }
   }, [ytMounted, ytMusicId])
 
-  // Görünüme girince sesini aç, çıkınca kapat
   useEffect(() => {
     const p = ytPlayerRef.current
     if (!ytReady || !p) return
     if (musicInView) {
       if (isMobile) {
-        // Mobil: sadece kullanıcı daha önce play'e tıkladıysa otomatik devam et
-        if (userStartedRef.current) {
-          try { p.playVideo() } catch {}
-          setYtPlaying(true)
-        }
-        // Henüz tıklamadıysa play butonuna basmasını bekle
+        if (userStartedRef.current) { try { p.playVideo() } catch {}; setYtPlaying(true) }
       } else {
-        // Desktop: direkt unMute + play (user gesture olmadan çalışır)
-        try { p.unMute(); p.setVolume(100); p.playVideo() } catch {}
-        setYtPlaying(true)
+        try { p.unMute(); p.setVolume(100); p.playVideo() } catch {}; setYtPlaying(true)
       }
     } else {
-      try { p.mute(); p.pauseVideo() } catch {}
-      setYtPlaying(false)
+      try { p.mute(); p.pauseVideo() } catch {}; setYtPlaying(false)
     }
   }, [musicInView, ytReady])
 
@@ -139,17 +106,13 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
     const p = ytPlayerRef.current
     if (!p) return
     if (ytPlaying) {
-      try { p.mute(); p.pauseVideo() } catch {}
-      setYtPlaying(false)
+      try { p.mute(); p.pauseVideo() } catch {}; setYtPlaying(false)
     } else {
-      // Bu bir user gesture → unMute mobilde de çalışır
       userStartedRef.current = true
-      try { p.unMute(); p.setVolume(100); p.playVideo() } catch {}
-      setYtPlaying(true)
+      try { p.unMute(); p.setVolume(100); p.playVideo() } catch {}; setYtPlaying(true)
     }
   }
 
-  // Direkt ses dosyası (Supabase mp3 vb.)
   useEffect(() => {
     if (!currentPost.music_url || ytMusicId) return
     setAudioSrc(currentPost.music_url)
@@ -163,6 +126,9 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
   // ───────────────────────────────────────────────────────────
 
   const isOwner = user?.id === post.user_id
+  const avatarUrl = post.profiles?.avatar_url
+  const username = post.profiles?.username || 'anonim'
+  const displayName = post.profiles?.display_name || username
 
   async function toggleLike() {
     if (!user) { toast.error('Beğenmek için giriş yap'); return }
@@ -178,7 +144,6 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
     } else {
       await supabase.from('likes').delete().eq('user_id', user.id).eq('post_id', post.id)
     }
-    onLikeToggle?.()
   }
 
   async function toggleRepost() {
@@ -218,74 +183,169 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
     else { await navigator.clipboard.writeText(url); toast.success('Link kopyalandı!') }
   }
 
-  async function handleDelete() {
-    setShowMenu(false)
-    onDelete?.(post.id)
-  }
-
   function handleCommentClose(newCount) {
     setShowComments(false)
     if (typeof newCount === 'number') setCommentCount(newCount)
   }
 
-  const avatarUrl = post.profiles?.avatar_url
-  const username = post.profiles?.username || 'anonim'
-  const displayName = post.profiles?.display_name || username
+  const caption = currentPost.caption || ''
+  const isLongCaption = caption.length > 80
 
   return (
     <>
-      <article className="card animate-fade-in overflow-hidden" onClick={() => showMenu && setShowMenu(false)}>
-        {showRepostBadge && (
-          <div className="flex items-center gap-1.5 px-4 pt-3 text-xs text-gray-500">
-            <Repeat2 className="w-3.5 h-3.5" /> Repost edildi
+      <div
+        className="relative h-full w-full bg-black overflow-hidden"
+        onClick={() => showMenu && setShowMenu(false)}
+        ref={musicRef}
+      >
+        {/* GIF - tam ekran arka plan */}
+        <img
+          src={currentPost.gif_url}
+          alt={currentPost.caption || 'GIF'}
+          className="absolute inset-0 w-full h-full object-contain"
+          loading="lazy"
+        />
+
+        {/* Metin overlay (meme tarzı) */}
+        {currentPost.show_overlay && currentPost.text_overlay && (
+          <div className="absolute top-16 inset-x-0 px-4 text-center z-10 pointer-events-none">
+            <p className="text-white font-black text-2xl leading-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]"
+              style={{ WebkitTextStroke: '1px black' }}>
+              {currentPost.text_overlay}
+            </p>
           </div>
         )}
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 pt-3 pb-3">
-          <Link to={`/profile/${username}`} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-            <div className="relative flex-shrink-0">
-              <div className="w-9 h-9 rounded-full overflow-hidden bg-brand-800">
+        {/* Alt gradient */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent pointer-events-none" />
+
+        {/* Sol alt: kullanıcı + açıklama + müzik */}
+        <div className="absolute bottom-20 left-4 right-20 z-10">
+          <Link to={`/profile/${username}`} className="flex items-center gap-2 mb-3">
+            <div className="relative">
+              <div className="w-10 h-10 rounded-full overflow-hidden bg-brand-800 ring-2 ring-white/30">
                 {avatarUrl
                   ? <img src={avatarUrl} alt={username} className="w-full h-full object-cover" />
-                  : <div className="w-full h-full flex items-center justify-center text-brand-200 text-sm font-bold">{username[0]?.toUpperCase()}</div>
+                  : <div className="w-full h-full flex items-center justify-center text-white font-bold">{username[0]?.toUpperCase()}</div>
                 }
               </div>
               {onlineUsers.has(post.user_id) && (post.user_id === user?.id ? myProfile?.show_online_status !== false : post.profiles?.show_online_status !== false) && (
-                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-[#12121e]" />
+                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-black" />
               )}
             </div>
-            <div>
-              <p className="font-semibold text-sm text-white flex items-center gap-1">
-                {displayName}
-                {post.profiles?.is_verified && <BadgeCheck className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
-              </p>
-              <p className="text-xs text-gray-500">@{username} · {formatTime(post.created_at)}</p>
+            <div className="flex items-center gap-1">
+              <span className="text-white font-bold text-sm drop-shadow">{displayName}</span>
+              {post.profiles?.is_verified && <BadgeCheck className="w-3.5 h-3.5 text-blue-400" />}
             </div>
           </Link>
 
+          {caption && (
+            <div className="mb-2">
+              <p className="text-white text-sm leading-snug drop-shadow">
+                {isLongCaption && !captionExpanded ? caption.slice(0, 80) + '...' : caption}
+                {currentPost.tags?.map(tag => (
+                  <Link key={tag} to={`/explore?tag=${tag}`} className="text-brand-300 ml-1">#{tag}</Link>
+                ))}
+              </p>
+              {isLongCaption && (
+                <button onClick={() => setCaptionExpanded(e => !e)} className="text-white/60 text-xs mt-0.5">
+                  {captionExpanded ? 'Daha az' : 'Devamı'}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Müzik */}
+          {currentPost.music_url && (
+            <div>
+              {ytMounted && (
+                <div ref={ytContainerRef}
+                  style={{ position: 'fixed', left: '-400px', top: '50%', width: '200px', height: '112px', pointerEvents: 'none' }} />
+              )}
+              {ytMusicId ? (
+                isMobile ? (
+                  <a href={`https://music.youtube.com/watch?v=${ytMusicId}`} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-2 bg-white/10 backdrop-blur rounded-full px-3 py-1.5 w-fit">
+                    <Music className="w-3.5 h-3.5 text-white animate-spin" style={{ animationDuration: '3s' }} />
+                    <span className="text-white text-xs max-w-[160px] truncate">{ytTitle}</span>
+                    <ExternalLink className="w-3 h-3 text-white/60" />
+                  </a>
+                ) : (
+                  <button onClick={toggleYt}
+                    className="flex items-center gap-2 bg-white/10 backdrop-blur rounded-full px-3 py-1.5 w-fit">
+                    {ytPlaying
+                      ? <Pause className="w-3.5 h-3.5 text-white" />
+                      : <Play className="w-3.5 h-3.5 text-white fill-white" />}
+                    <Music className={`w-3.5 h-3.5 text-white ${ytPlaying ? 'animate-spin' : ''}`} style={{ animationDuration: '3s' }} />
+                    <span className="text-white text-xs max-w-[160px] truncate">{ytTitle}</span>
+                    {!ytReady && <Loader2 className="w-3 h-3 text-white/60 animate-spin" />}
+                  </button>
+                )
+              ) : audioSrc ? (
+                <audio ref={audioRef} src={audioSrc} loop className="hidden" />
+              ) : null}
+            </div>
+          )}
+        </div>
+
+        {/* Sağ: aksiyon butonları dikey - TikTok stili */}
+        <div className="absolute right-3 bottom-24 flex flex-col items-center gap-5 z-10">
+          {/* Profil avatar */}
+          <Link to={`/profile/${username}`} className="relative mb-2">
+            <div className="w-12 h-12 rounded-full overflow-hidden bg-brand-800 ring-2 ring-white">
+              {avatarUrl
+                ? <img src={avatarUrl} alt={username} className="w-full h-full object-cover" />
+                : <div className="w-full h-full flex items-center justify-center text-white font-bold">{username[0]?.toUpperCase()}</div>
+              }
+            </div>
+          </Link>
+
+          {/* Like */}
+          <button onClick={toggleLike} className="flex flex-col items-center gap-1">
+            <Heart className={`w-8 h-8 drop-shadow-lg transition-transform active:scale-125 ${liked ? 'fill-red-500 text-red-500' : 'text-white'}`} />
+            <span className="text-white text-xs font-semibold drop-shadow">{likeCount}</span>
+          </button>
+
+          {/* Comment */}
+          <button onClick={() => setShowComments(true)} className="flex flex-col items-center gap-1">
+            <MessageCircle className="w-8 h-8 text-white drop-shadow-lg active:scale-110 transition-transform" />
+            <span className="text-white text-xs font-semibold drop-shadow">{commentCount}</span>
+          </button>
+
+          {/* Repost */}
+          <button onClick={toggleRepost} className="flex flex-col items-center gap-1">
+            <Repeat2 className={`w-8 h-8 drop-shadow-lg transition-transform active:scale-110 ${reposted ? 'text-green-400' : 'text-white'}`} />
+            <span className="text-white text-xs font-semibold drop-shadow">{repostCount}</span>
+          </button>
+
+          {/* Share */}
+          <button onClick={share} className="flex flex-col items-center gap-1">
+            <Share2 className="w-7 h-7 text-white drop-shadow-lg active:scale-110 transition-transform" />
+            <span className="text-white text-xs font-semibold drop-shadow">Paylaş</span>
+          </button>
+
+          {/* More */}
           <div className="relative">
-            <button onClick={e => { e.stopPropagation(); setShowMenu(m => !m) }}
-              className="text-gray-500 hover:text-white p-1 rounded-lg hover:bg-white/5 transition-all">
-              <MoreHorizontal className="w-5 h-5" />
+            <button onClick={e => { e.stopPropagation(); setShowMenu(m => !m) }}>
+              <MoreHorizontal className="w-7 h-7 text-white drop-shadow-lg" />
             </button>
             {showMenu && (
-              <div className="absolute right-0 top-8 bg-[#1a1a2e] border border-[#3a3a5c] rounded-xl shadow-xl z-20 min-w-[140px] py-1"
+              <div className="absolute right-8 bottom-0 bg-[#1a1a2e] border border-[#3a3a5c] rounded-xl shadow-2xl min-w-[150px] py-1 z-30"
                 onClick={e => e.stopPropagation()}>
                 {isOwner && (
                   <>
                     <button onClick={() => { setEditMode(true); setShowMenu(false) }}
-                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/5">
+                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5">
                       <Pencil className="w-4 h-4" /> Düzenle
                     </button>
-                    <button onClick={handleDelete}
-                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-red-500/10">
+                    <button onClick={() => { setShowMenu(false); onDelete?.(post.id) }}
+                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10">
                       <Trash2 className="w-4 h-4" /> Sil
                     </button>
                   </>
                 )}
                 <button onClick={() => { share(); setShowMenu(false) }}
-                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/5">
+                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5">
                   <Share2 className="w-4 h-4" /> Paylaş
                 </button>
               </div>
@@ -293,134 +353,33 @@ export default function GIFCard({ post, onLikeToggle, showRepostBadge, onDelete 
           </div>
         </div>
 
-        {/* Düzenleme modu */}
-        {editMode ? (
-          <div className="px-4 pb-3 space-y-2">
-            <input className="input text-sm" placeholder="Açıklama..." value={editCaption}
-              onChange={e => setEditCaption(e.target.value)} />
-            <input className="input text-sm" placeholder="GIF üzerine yazı (meme tarzı)..."
-              value={editOverlay} onChange={e => setEditOverlay(e.target.value)} />
-            {editOverlay && (
-              <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
-                <input type="checkbox" checked={showOverlay} onChange={e => setShowOverlay(e.target.checked)} />
-                GIF üzerinde göster
-              </label>
-            )}
-            <div className="flex gap-2">
-              <button onClick={saveEdit} disabled={saving}
-                className="btn-primary text-sm px-3 py-1.5 flex items-center gap-1">
-                {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Kaydet
-              </button>
-              <button onClick={() => setEditMode(false)} className="btn-ghost text-sm px-3 py-1.5 flex items-center gap-1">
-                <X className="w-3 h-3" /> İptal
-              </button>
+        {/* Düzenleme modu overlay */}
+        {editMode && (
+          <div className="absolute inset-0 bg-black/80 z-30 flex items-end">
+            <div className="w-full p-4 space-y-3">
+              <input className="input text-sm w-full" placeholder="Açıklama..." value={editCaption}
+                onChange={e => setEditCaption(e.target.value)} />
+              <input className="input text-sm w-full" placeholder="GIF üzerine yazı (meme tarzı)..."
+                value={editOverlay} onChange={e => setEditOverlay(e.target.value)} />
+              {editOverlay && (
+                <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
+                  <input type="checkbox" checked={showOverlay} onChange={e => setShowOverlay(e.target.checked)} />
+                  GIF üzerinde göster
+                </label>
+              )}
+              <div className="flex gap-2">
+                <button onClick={saveEdit} disabled={saving}
+                  className="btn-primary text-sm px-4 py-2 flex items-center gap-1">
+                  {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Kaydet
+                </button>
+                <button onClick={() => setEditMode(false)} className="btn-ghost text-sm px-4 py-2 flex items-center gap-1">
+                  <X className="w-3 h-3" /> İptal
+                </button>
+              </div>
             </div>
-          </div>
-        ) : currentPost.caption ? (
-          <p className="px-4 pb-3 text-sm text-gray-300">
-            {currentPost.caption}
-            {currentPost.tags?.map(tag => (
-              <Link key={tag} to={`/explore?tag=${tag}`} className="text-brand-400 ml-1">#{tag}</Link>
-            ))}
-          </p>
-        ) : null}
-
-        {/* GIF */}
-        <div className="relative bg-black/30 min-h-[200px] flex items-center justify-center">
-          {!imgLoaded && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-            </div>
-          )}
-          <img
-            src={currentPost.gif_url}
-            alt={currentPost.caption || 'GIF'}
-            className={`w-full max-h-[500px] object-contain transition-opacity duration-300 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
-            onLoad={() => setImgLoaded(true)}
-            loading="lazy"
-          />
-          {currentPost.show_overlay && currentPost.text_overlay && (
-            <div className="absolute bottom-0 inset-x-0 bg-black/70 px-4 py-3 text-center">
-              <p className="text-white font-bold text-lg leading-tight" style={{ textShadow: '2px 2px 4px black' }}>
-                {currentPost.text_overlay}
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Music Player */}
-        {currentPost.music_url && (
-          <div ref={musicRef} className="px-4 pb-3">
-            {ytMusicId ? (
-              isMobile ? (
-                // Mobil: eski YouTube URL'li postlar için estetik dış link butonu
-                // Yeni postlar music_url = Supabase URL → <audio> ile çalışır (ytMusicId=null)
-                <a
-                  href={`https://music.youtube.com/watch?v=${ytMusicId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 bg-[#12121e] border border-[#2a2a3f] rounded-xl px-3 py-2.5 hover:border-brand-500/50 transition-colors"
-                >
-                  <Music className="w-4 h-4 text-brand-400 flex-shrink-0" />
-                  <p className="text-xs text-gray-300 truncate flex-1">{ytTitle || 'YouTube Müziği'}</p>
-                  <ExternalLink className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
-                </a>
-              ) : (
-                // Desktop: gizli YT.Player API + custom UI + viewport auto-play
-                <>
-                  {ytMounted && (
-                    <div
-                      ref={ytContainerRef}
-                      style={{ position: 'fixed', left: '-400px', top: '50%', width: '200px', height: '112px', pointerEvents: 'none' }}
-                    />
-                  )}
-                  <div className="flex items-center gap-3 bg-[#12121e] border border-[#2a2a3f] rounded-xl px-3 py-2.5">
-                    <button onClick={toggleYt}
-                      className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-brand-500 hover:bg-brand-600 rounded-full transition-colors">
-                      {ytPlaying
-                        ? <Pause className="w-3.5 h-3.5 text-white" />
-                        : <Play className="w-3.5 h-3.5 text-white fill-white" />}
-                    </button>
-                    <Music className="w-4 h-4 text-brand-400 flex-shrink-0" />
-                    <p className="text-xs text-gray-300 truncate flex-1">{ytTitle}</p>
-                    {!ytReady && <Loader2 className="w-3.5 h-3.5 text-gray-600 animate-spin flex-shrink-0" />}
-                  </div>
-                </>
-              )
-            ) : audioSrc ? (
-              <audio ref={audioRef} src={audioSrc} loop controls
-                className="w-full h-8" style={{ colorScheme: 'dark' }} />
-            ) : null}
           </div>
         )}
-
-        {/* Actions */}
-        <div className="flex items-center gap-1 px-3 py-3">
-          <button onClick={toggleLike}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
-              liked ? 'text-red-400 bg-red-500/10' : 'text-gray-400 hover:text-red-400 hover:bg-red-500/10'
-            }`}>
-            <Heart className={`w-5 h-5 ${liked ? 'fill-current' : ''}`} />
-            <span>{likeCount}</span>
-          </button>
-
-          <button onClick={() => setShowComments(true)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
-              commentCount > 0 ? 'text-blue-400 bg-blue-500/10' : 'text-gray-400 hover:text-blue-400 hover:bg-blue-500/10'
-            }`}>
-            <MessageCircle className={`w-5 h-5 ${commentCount > 0 ? 'fill-current opacity-30' : ''}`} />
-            <span>{commentCount}</span>
-          </button>
-
-          <button onClick={toggleRepost}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
-              reposted ? 'text-green-400 bg-green-500/10' : 'text-gray-400 hover:text-green-400 hover:bg-green-500/10'
-            }`}>
-            <Repeat2 className="w-5 h-5" />
-            <span>{repostCount}</span>
-          </button>
-        </div>
-      </article>
+      </div>
 
       {showComments && (
         <CommentModal
@@ -440,17 +399,4 @@ function getYouTubeId(url) {
     if (u.hostname.includes('music.youtube.com')) return u.searchParams.get('v')
   } catch { return null }
   return null
-}
-
-function formatTime(ts) {
-  if (!ts) return ''
-  const diff = Date.now() - new Date(ts).getTime()
-  const m = Math.floor(diff / 60000)
-  if (m < 1) return 'şimdi'
-  if (m < 60) return `${m}dk`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h}sa`
-  const d = Math.floor(h / 24)
-  if (d < 7) return `${d}g`
-  return new Date(ts).toLocaleDateString('tr-TR')
 }

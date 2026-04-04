@@ -23,7 +23,6 @@ export default function Feed({ mode = 'all' }) {
     setLoading(true)
     try {
       let data = []
-
       if (mode === 'following' && user) {
         const { data: follows } = await supabase
           .from('follows').select('following_id').eq('follower_id', user.id)
@@ -56,7 +55,6 @@ export default function Feed({ mode = 'all' }) {
         data = data.map(p => ({ ...p, user_liked: likedIds.has(p.id), user_reposted: repostedIds.has(p.id) }))
       }
 
-      // Engellenen kullanıcıların postlarını filtrele
       if (allBlockedIds.size > 0) data = data.filter(p => !allBlockedIds.has(p.user_id))
 
       setPosts(prev => reset ? data : [...prev, ...data])
@@ -85,25 +83,35 @@ export default function Feed({ mode = 'all' }) {
 
   if (posts.length === 0 && !loading) {
     return (
-      <div className="text-center py-20 text-gray-500">
-        <p className="text-4xl mb-3">🎬</p>
-        <p className="font-medium">Henüz GIF yok</p>
-        {mode === 'following' && <p className="text-sm mt-1">Birilerini takip et!</p>}
+      <div className="h-full flex flex-col items-center justify-center text-gray-500">
+        <p className="text-5xl mb-4">🎬</p>
+        <p className="font-semibold text-white">Henüz GIF yok</p>
+        {mode === 'following' && <p className="text-sm mt-2 text-gray-400">Birilerini takip et!</p>}
       </div>
     )
   }
 
   return (
-    <div className="space-y-4 max-w-2xl mx-auto">
-      {posts.map(post => <GIFCard key={post.id} post={post} />)}
-      <div ref={ref} className="h-8" />
+    <div
+      className="h-full overflow-y-scroll snap-y snap-mandatory"
+      style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+    >
+      <style>{`div::-webkit-scrollbar { display: none; }`}</style>
+      {posts.map(post => (
+        <div key={post.id} className="h-screen snap-start snap-always flex-shrink-0">
+          <GIFCard post={post} />
+        </div>
+      ))}
+      <div ref={ref} className="snap-start h-4" />
       {loading && (
-        <div className="flex justify-center py-8">
-          <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+        <div className="h-screen snap-start flex items-center justify-center">
+          <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin" />
         </div>
       )}
       {!hasMore && posts.length > 0 && (
-        <p className="text-center text-gray-600 text-sm py-8">Hepsini gördün!</p>
+        <div className="h-screen snap-start flex items-center justify-center">
+          <p className="text-gray-500 text-sm">Hepsini gördün!</p>
+        </div>
       )}
     </div>
   )

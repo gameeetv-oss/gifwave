@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { PresenceProvider } from './context/PresenceContext'
 import { BlockProvider } from './context/BlockContext'
@@ -20,24 +20,25 @@ function PrivateRoute({ children }) {
 }
 
 function AppRoutes() {
+  const location = useLocation()
+  const isHome = location.pathname === '/'
+
   return (
-    <div className="min-h-screen">
+    <div className={isHome ? 'h-screen overflow-hidden' : 'min-h-screen pb-16'}>
       <Navbar />
-      <div className="pt-16">
-        <Routes>
-          <Route path="/" element={<PrivateRoute><Home /></PrivateRoute>} />
-          <Route path="/explore" element={<Explore />} />
-          <Route path="/upload" element={<PrivateRoute><Upload /></PrivateRoute>} />
-          <Route path="/notifications" element={<PrivateRoute><Notifications /></PrivateRoute>} />
-          <Route path="/messages" element={<PrivateRoute><Messages /></PrivateRoute>} />
-          <Route path="/messages/:userId" element={<PrivateRoute><Messages /></PrivateRoute>} />
-          <Route path="/post/:id" element={<PostDetail />} />
-          <Route path="/profile/:username" element={<Profile />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
-      </div>
+      <Routes>
+        <Route path="/" element={<PrivateRoute><Home /></PrivateRoute>} />
+        <Route path="/explore" element={<Explore />} />
+        <Route path="/upload" element={<PrivateRoute><Upload /></PrivateRoute>} />
+        <Route path="/notifications" element={<PrivateRoute><Notifications /></PrivateRoute>} />
+        <Route path="/messages" element={<PrivateRoute><Messages /></PrivateRoute>} />
+        <Route path="/messages/:userId" element={<PrivateRoute><Messages /></PrivateRoute>} />
+        <Route path="/post/:id" element={<PostDetail />} />
+        <Route path="/profile/:username" element={<Profile />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="*" element={<Navigate to="/" />} />
+      </Routes>
     </div>
   )
 }
