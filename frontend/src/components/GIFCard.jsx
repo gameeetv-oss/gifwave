@@ -96,14 +96,9 @@ export default function GIFCard({ post, onDelete }) {
     const p = ytPlayerRef.current
     if (!ytReady || !p) return
     if (musicInView) {
-      if (userStartedRef.current) {
-        try { p.unMute(); p.setVolume(100); p.playVideo() } catch {}
-        setYtPlaying(true)
-      } else {
-        // İlk kez - sesi kapalı başlat, kullanıcı dokunana kadar bekle
-        try { p.mute(); p.playVideo() } catch {}
-        setNeedsTap(true)
-      }
+      try { p.unMute(); p.setVolume(100); p.playVideo() } catch {}
+      setYtPlaying(true)
+      setNeedsTap(false)
     } else {
       try { p.mute(); p.pauseVideo() } catch {}
       setYtPlaying(false)
@@ -133,10 +128,14 @@ export default function GIFCard({ post, onDelete }) {
       audioRef.current.play().then(() => {
         setAudioPlaying(true)
         setNeedsTap(false)
-      }).catch(() => setNeedsTap(true))
+      }).catch(() => {
+        // WebView autoplay bloke ediyorsa tap göster
+        setNeedsTap(true)
+      })
     } else {
       audioRef.current.pause()
       setAudioPlaying(false)
+      setNeedsTap(false)
     }
   }, [musicInView, audioSrc])
 
