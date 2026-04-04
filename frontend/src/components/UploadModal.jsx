@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { X, Upload, Search, Video, Loader2, Check, Music, Trash2, Camera, StopCircle, Image, FlipHorizontal, Type } from 'lucide-react'
+import { X, Upload, Search, Video, Loader2, Check, Music, Trash2, Camera, StopCircle, Image, FlipHorizontal, Type, Circle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
@@ -48,6 +48,8 @@ export default function UploadModal({ onClose, onSuccess }) {
   const [cameraConvertLoading, setCameraConvertLoading] = useState(false)
   const [countdown, setCountdown] = useState(0)
   const [facingMode, setFacingMode] = useState('environment') // 'environment' = arka, 'user' = ön
+  const [capturedPhoto, setCapturedPhoto] = useState(null) // fotoğraf modu
+  const [cameraMode, setCameraMode] = useState('video') // 'video' | 'photo'
 
   // Text overlay
   const [textOverlay, setTextOverlay] = useState('')
@@ -123,6 +125,19 @@ export default function UploadModal({ onClose, onSuccess }) {
     if (cameraVideoRef.current) cameraVideoRef.current.srcObject = null
     setCameraActive(false)
     setRecording(false)
+  }
+
+  function takePhoto() {
+    const video = cameraVideoRef.current
+    if (!video) return
+    const canvas = document.createElement('canvas')
+    canvas.width = video.videoWidth || 640
+    canvas.height = video.videoHeight || 480
+    canvas.getContext('2d').drawImage(video, 0, 0)
+    canvas.toBlob(blob => {
+      setCapturedPhoto({ blob, url: URL.createObjectURL(blob) })
+      stopCamera()
+    }, 'image/jpeg', 0.92)
   }
 
   function startRecording() {
@@ -235,13 +250,24 @@ export default function UploadModal({ onClose, onSuccess }) {
         const { data: { publicUrl } } = supabase.storage.from('gifs').getPublicUrl(path)
         gifUrl = publicUrl; source = 'converted'
       } else if (tab === 'camera') {
-        if (!cameraConverted) { toast.error('Önce video çek ve GIF\'e dönüştür'); setLoading(false); return }
-        const blob = await fetch(cameraConverted).then(r => r.blob())
-        const path = `${user.id}/${Date.now()}.gif`
-        const { error: upErr } = await supabase.storage.from('gifs').upload(path, blob, { contentType: 'image/gif' })
-        if (upErr) throw upErr
-        const { data: { publicUrl } } = supabase.storage.from('gifs').getPublicUrl(path)
-        gifUrl = publicUrl; source = 'camera'
+        if (capturedPhoto) {
+          // Fotoğraf modu
+          const path = `${user.id}/${Date.now()}.jpg`
+          const { error: upErr } = await supabase.storage.from('gifs').upload(path, capturedPhoto.blob, { contentType: 'image/jpeg' })
+          if (upErr) throw upErr
+          const { data: { publicUrl } } = supabase.storage.from('gifs').getPublicUrl(path)
+          gifUrl = publicUrl; source = 'photo'
+        } else if (cameraConverted) {
+          // Video→GIF modu
+          const blob = await fetch(cameraConverted).then(r => r.blob())
+          const path = `${user.id}/${Date.now()}.gif`
+          const { error: upErr } = await supabase.storage.from('gifs').upload(path, blob, { contentType: 'image/gif' })
+          if (upErr) throw upErr
+          const { data: { publicUrl } } = supabase.storage.from('gifs').getPublicUrl(path)
+          gifUrl = publicUrl; source = 'camera'
+        } else {
+          toast.error('Önce fotoğraf çek veya video kaydet'); setLoading(false); return
+        }
       }
 
       const tagArr = tags.split(',').map(t => t.trim().replace(/^#/, '')).filter(Boolean)
@@ -321,9 +347,22 @@ export default function UploadModal({ onClose, onSuccess }) {
           {/* Camera Tab */}
           {tab === 'camera' && (
             <div className="space-y-3">
+              {/* Mod seçici */}
+              {!cameraActive && !cameraVideoFile && !cameraConverted && !capturedPhoto && (
+                <div className="flex rounded-xl overflow-hidden border border-[#3a3a5c]">
+                  <button onClick={() => setCameraMode('photo')}
+                    className={`flex-1 py-2 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${cameraMode === 'photo' ? 'bg-brand-500 text-white' : 'text-gray-400 hover:text-white'}`}>
+                    <Image className="w-3.5 h-3.5" /> Fotoğraf
+                  </button>
+                  <button onClick={() => setCameraMode('video')}
+                    className={`flex-1 py-2 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${cameraMode === 'video' ? 'bg-brand-500 text-white' : 'text-gray-400 hover:text-white'}`}>
+                    <Video className="w-3.5 h-3.5" /> Video→GIF
+                  </button>
+                </div>
+              )}
               <div className="relative bg-black rounded-xl overflow-hidden aspect-video">
                 <video ref={cameraVideoRef} className="w-full h-full object-cover" muted playsInline />
-                {!cameraActive && !cameraVideoFile && (
+                {!cameraActive && !cameraVideoFile && !capturedPhoto && (
                   <div className="absolute inset-0 flex items-center justify-center">
                     <button onClick={() => startCamera()}
                       className="flex flex-col items-center gap-2 text-gray-400 hover:text-white transition-colors">
@@ -331,6 +370,9 @@ export default function UploadModal({ onClose, onSuccess }) {
                       <span className="text-sm">Kamerayı Aç</span>
                     </button>
                   </div>
+                )}
+                {capturedPhoto && (
+                  <img src={capturedPhoto.url} alt="foto" className="absolute inset-0 w-full h-full object-cover" />
                 )}
                 {cameraActive && !recording && (
                   <button onClick={flipCamera}
@@ -358,7 +400,13 @@ export default function UploadModal({ onClose, onSuccess }) {
                 )}
               </div>
 
-              {cameraActive && !recording && (
+              {cameraActive && !recording && cameraMode === 'photo' && (
+                <button onClick={takePhoto}
+                  className="w-full btn-primary py-3 flex items-center justify-center gap-2">
+                  <Circle className="w-4 h-4 fill-white" /> Fotoğraf Çek
+                </button>
+              )}
+              {cameraActive && !recording && cameraMode === 'video' && (
                 <button onClick={startRecording}
                   className="w-full btn-primary py-3 flex items-center justify-center gap-2">
                   <div className="w-3 h-3 bg-red-400 rounded-full" /> Kayda Başla (maks 10 sn)
@@ -369,6 +417,34 @@ export default function UploadModal({ onClose, onSuccess }) {
                   className="w-full bg-red-500 hover:bg-red-600 text-white py-3 rounded-xl flex items-center justify-center gap-2 transition-colors">
                   <StopCircle className="w-4 h-4" /> Kaydı Durdur
                 </button>
+              )}
+              {capturedPhoto && (
+                <div className="space-y-2">
+                  <div className="relative">
+                    <img src={capturedPhoto.url} alt="foto" className="w-full rounded-xl max-h-60 object-contain bg-black/20" />
+                    {textOverlay && showTextOverlay && (
+                      <div className="absolute top-3 inset-x-0 text-center pointer-events-none px-3">
+                        <p className="text-white font-black text-xl leading-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]"
+                          style={{ WebkitTextStroke: '1px black' }}>{textOverlay}</p>
+                      </div>
+                    )}
+                    <button onClick={() => { setCapturedPhoto(null); setTextOverlay(''); setShowTextOverlay(false) }}
+                      className="absolute top-2 right-2 bg-black/60 rounded-full p-1 text-white">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <Type className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    <input className="input flex-1 text-sm py-2" placeholder="Fotoğraf üzerine yazı ekle..."
+                      value={textOverlay} onChange={e => setTextOverlay(e.target.value)} />
+                    {textOverlay && (
+                      <button onClick={() => setShowTextOverlay(s => !s)}
+                        className={`text-xs px-2 py-1 rounded-lg border transition-colors ${showTextOverlay ? 'border-brand-500 text-brand-400' : 'border-gray-600 text-gray-500'}`}>
+                        {showTextOverlay ? 'Açık' : 'Kapalı'}
+                      </button>
+                    )}
+                  </div>
+                </div>
               )}
               {cameraVideoFile && !cameraConverted && (
                 <button onClick={convertCameraVideo} disabled={cameraConvertLoading}
