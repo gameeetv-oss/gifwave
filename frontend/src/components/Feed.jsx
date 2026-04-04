@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import { useBlock } from '../context/BlockContext'
 
 const AD_EVERY = 5 // Her 5 GIF'te 1 reklam
-const INTERSTITIAL_ID = 'ca-app-pub-3940256099942544/1033173712' // Test ID
+const INTERSTITIAL_ID = 'ca-app-pub-4416578432335144/9595174249'
 
 async function showInterstitialAd() {
   try {
