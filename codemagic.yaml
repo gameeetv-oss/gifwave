@@ -1,0 +1,55 @@
+workflows:
+  ios-workflow:
+    name: GifWave iOS Build
+    max_build_duration: 60
+    environment:
+      xcode: latest
+      node: 18
+      vars:
+        BUNDLE_ID: com.gifwave.app
+        XCODE_WORKSPACE: ios/App/App.xcworkspace
+        XCODE_SCHEME: App
+    scripts:
+      - name: Install dependencies
+        script: |
+          cd frontend
+          npm install
+
+      - name: Build web app
+        script: |
+          cd frontend
+          npm run build
+
+      - name: Add iOS platform
+        script: |
+          cd frontend
+          npm install @capacitor/ios
+          npx cap add ios || true
+
+      - name: Sync Capacitor
+        script: |
+          cd frontend
+          npx cap sync ios
+
+      - name: Install CocoaPods
+        script: |
+          cd frontend/ios/App
+          pod install
+
+      - name: Build iOS (unsigned)
+        script: |
+          cd frontend
+          xcodebuild \
+            -workspace ios/App/App.xcworkspace \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphoneos \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CONFIGURATION_BUILD_DIR=build \
+            clean build
+
+    artifacts:
+      - frontend/build/*.app
+      - frontend/build/**/*.ipa
