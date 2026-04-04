@@ -465,7 +465,11 @@ export default function Explore() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {searchResults.map(post => <GIFCard key={post.id} post={post} />)}
+                  {searchResults.map(post => (
+                    <div key={post.id} className="relative h-[480px] rounded-2xl overflow-hidden">
+                      <GIFCard post={post} />
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -506,7 +510,11 @@ export default function Explore() {
                     <TrendingUp className="w-4 h-4 text-brand-400" /> Popüler Gönderiler
                   </h2>
                   <div className="space-y-4">
-                    {trendingPosts.map(post => <GIFCard key={post.id} post={post} />)}
+                    {trendingPosts.map(post => (
+                      <div key={post.id} className="relative h-[480px] rounded-2xl overflow-hidden">
+                        <GIFCard post={post} />
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}

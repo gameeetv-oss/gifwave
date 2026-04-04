@@ -66,11 +66,13 @@ export default function PostDetail() {
         <ArrowLeft className="w-4 h-4" /> Geri
       </button>
       {post && (
-        <GIFCard
-          post={post}
-          onLikeToggle={fetchPost}
-          onDelete={handleDelete}
-        />
+        <div className="relative h-[600px] rounded-2xl overflow-hidden">
+          <GIFCard
+            post={post}
+            onLikeToggle={fetchPost}
+            onDelete={handleDelete}
+          />
+        </div>
       )}
     </div>
   )

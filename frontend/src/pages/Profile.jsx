@@ -425,7 +425,7 @@ export default function Profile() {
       ) : (
         <div className="space-y-4">
           {currentItems.map(post => (
-            <div key={post.id + (post._repost ? '_r' : post._liked ? '_l' : '')} className="relative">
+            <div key={post.id + (post._repost ? '_r' : post._liked ? '_l' : '')} className="relative h-[500px] rounded-2xl overflow-hidden">
               <GIFCard post={post} showRepostBadge={!!post._repost}
                 onDelete={isMe && tab === 'posts' ? deletePost : undefined} />
             </div>
