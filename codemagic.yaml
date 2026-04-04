@@ -25,15 +25,12 @@ workflows:
           cd frontend
           npm run build
 
-      - name: Add iOS platform
+      - name: Add and Sync iOS platform
         script: |
           cd frontend
           npx cap add ios || true
-
-      - name: Sync Capacitor
-        script: |
-          cd frontend
-          npx cap sync ios
+          npx cap copy ios
+          npx cap update ios || true
 
       - name: Install CocoaPods
         script: |
