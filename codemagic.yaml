@@ -10,39 +10,31 @@ workflows:
         VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53ZHdmd29rZHBqZGtwc3p0dXVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NTMzODMsImV4cCI6MjA4ODIyOTM4M30.H9_9Noz8A2kOeP1J2yHP9Vr_06S9T2q0UWdTL3Z1wUo
         VITE_BACKEND_URL: https://gifwave-backend.onrender.com
     scripts:
-      - name: Install dependencies
+      - name: Setup
         script: |
           cd frontend
           npm install
-
-      - name: Install Capacitor iOS
-        script: |
-          cd frontend
           npm install @capacitor/core @capacitor/cli @capacitor/ios
-
-      - name: Build web app
-        script: |
-          cd frontend
           npm run build
 
-      - name: Add and Sync iOS platform
+      - name: Setup iOS
         script: |
           cd frontend
-          npx cap add ios || true
-          npx cap copy ios
-          npx cap update ios || true
+          ./node_modules/.bin/cap add ios || true
+          echo "--- iOS folder contents ---"
+          ls -la ios/ || echo "ios folder not found"
+          ls -la ios/App/ || echo "ios/App not found"
+          ./node_modules/.bin/cap sync ios
 
-      - name: Install CocoaPods
+      - name: CocoaPods
         script: |
-          ls frontend/ios/App/
           cd frontend/ios/App
-          pod install --verbose
+          pod install --repo-update
 
-      - name: Build iOS (unsigned)
+      - name: Build
         script: |
-          cd frontend
           xcodebuild \
-            -workspace ios/App/App.xcworkspace \
+            -workspace frontend/ios/App/App.xcworkspace \
             -scheme App \
             -configuration Debug \
             -sdk iphoneos \
@@ -50,7 +42,7 @@ workflows:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             CONFIGURATION_BUILD_DIR=$CM_BUILD_DIR/build \
-            clean build 2>&1 | tail -50
+            clean build
 
     artifacts:
       - $CM_BUILD_DIR/build/*.app
