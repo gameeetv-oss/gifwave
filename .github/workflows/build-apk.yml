@@ -44,6 +44,11 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Add Android permissions
+        working-directory: frontend/android
+        run: |
+          sed -i 's|<uses-permission android:name="android.permission.INTERNET" />|<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-feature android:name="android.hardware.camera" android:required="false" />|' app/src/main/AndroidManifest.xml
+
       - name: Fix Kotlin stdlib conflict
         working-directory: frontend/android
         run: |

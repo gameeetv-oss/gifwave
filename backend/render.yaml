@@ -1,9 +1,7 @@
 services:
   - type: web
     name: gifwave-backend
-    runtime: python
-    buildCommand: pip install -r requirements.txt && apt-get install -y ffmpeg || true
-    startCommand: python main.py
+    runtime: docker
     envVars:
       - key: GIPHY_API_KEY
         sync: false
