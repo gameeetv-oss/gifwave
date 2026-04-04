@@ -21,10 +21,12 @@ workflows:
         script: |
           cd frontend
           ./node_modules/.bin/cap add ios || true
-          echo "--- iOS folder contents ---"
-          ls -la ios/ || echo "ios folder not found"
-          ls -la ios/App/ || echo "ios/App not found"
-          ./node_modules/.bin/cap sync ios
+          # Minimum iOS deployment target ayarla
+          sed -i '' "s/platform :ios, '13.0'/platform :ios, '14.0'/" ios/App/Podfile || true
+          # Eğer platform satırı yoksa ekle
+          grep -q "^platform :ios" ios/App/Podfile || sed -i '' '1s/^/platform :ios, '"'"'14.0'"'"'\n/' ios/App/Podfile
+          cat ios/App/Podfile
+          ./node_modules/.bin/cap copy ios
 
       - name: CocoaPods
         script: |
