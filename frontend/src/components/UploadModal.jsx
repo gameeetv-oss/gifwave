@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { X, Upload, Search, Video, Loader2, Check, Music, Trash2, Camera, StopCircle, Image } from 'lucide-react'
+import { X, Upload, Search, Video, Loader2, Check, Music, Trash2, Camera, StopCircle, Image, FlipHorizontal, Type } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
@@ -47,6 +47,11 @@ export default function UploadModal({ onClose, onSuccess }) {
   const [cameraConverted, setCameraConverted] = useState(null)
   const [cameraConvertLoading, setCameraConvertLoading] = useState(false)
   const [countdown, setCountdown] = useState(0)
+  const [facingMode, setFacingMode] = useState('environment') // 'environment' = arka, 'user' = ön
+
+  // Text overlay
+  const [textOverlay, setTextOverlay] = useState('')
+  const [showTextOverlay, setShowTextOverlay] = useState(false)
 
   useEffect(() => {
     return () => stopCamera()
@@ -94,14 +99,22 @@ export default function UploadModal({ onClose, onSuccess }) {
   }
 
   // ── Kamera ────────────────────────────────────────────────────
-  async function startCamera() {
+  async function startCamera(mode) {
+    const facing = mode || facingMode
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing }, audio: false })
       streamRef.current = stream
       cameraVideoRef.current.srcObject = stream
       await cameraVideoRef.current.play()
       setCameraActive(true)
     } catch { toast.error('Kamera erişilemedi') }
+  }
+
+  async function flipCamera() {
+    const newMode = facingMode === 'environment' ? 'user' : 'environment'
+    setFacingMode(newMode)
+    stopCamera()
+    setTimeout(() => startCamera(newMode), 100)
   }
 
   function stopCamera() {
@@ -235,6 +248,8 @@ export default function UploadModal({ onClose, onSuccess }) {
       const { error } = await supabase.from('posts').insert({
         user_id: user.id, gif_url: gifUrl, caption: caption.trim() || null,
         tags: tagArr, source, music_url: musicUrl.trim() || null,
+        text_overlay: textOverlay.trim() || null,
+        show_overlay: showTextOverlay && !!textOverlay.trim(),
         likes_count: 0, comments_count: 0
       })
       if (error) throw error
@@ -310,12 +325,18 @@ export default function UploadModal({ onClose, onSuccess }) {
                 <video ref={cameraVideoRef} className="w-full h-full object-cover" muted playsInline />
                 {!cameraActive && !cameraVideoFile && (
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <button onClick={startCamera}
+                    <button onClick={() => startCamera()}
                       className="flex flex-col items-center gap-2 text-gray-400 hover:text-white transition-colors">
                       <Camera className="w-12 h-12" />
                       <span className="text-sm">Kamerayı Aç</span>
                     </button>
                   </div>
+                )}
+                {cameraActive && !recording && (
+                  <button onClick={flipCamera}
+                    className="absolute top-3 right-3 bg-black/60 rounded-full p-2 text-white hover:bg-black/80 transition-colors">
+                    <FlipHorizontal className="w-5 h-5" />
+                  </button>
                 )}
                 {recording && countdown > 0 && (
                   <div className="absolute top-3 right-3 bg-red-500 text-white text-sm font-bold rounded-full w-8 h-8 flex items-center justify-center">
@@ -326,6 +347,13 @@ export default function UploadModal({ onClose, onSuccess }) {
                   <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-black/60 rounded-full px-2 py-1">
                     <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
                     <span className="text-white text-xs">Kayıt</span>
+                  </div>
+                )}
+                {/* Yazı overlay önizleme */}
+                {cameraConverted && textOverlay && showTextOverlay && (
+                  <div className="absolute top-4 inset-x-0 text-center pointer-events-none px-3">
+                    <p className="text-white font-black text-xl leading-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]"
+                      style={{ WebkitTextStroke: '1px black' }}>{textOverlay}</p>
                   </div>
                 )}
               </div>
@@ -351,12 +379,32 @@ export default function UploadModal({ onClose, onSuccess }) {
                 </button>
               )}
               {cameraConverted && (
-                <div className="relative">
-                  <img src={cameraConverted} alt="camera gif" className="w-full rounded-xl max-h-60 object-contain bg-black/20" />
-                  <button onClick={() => { setCameraConverted(null); setCameraVideoFile(null) }}
-                    className="absolute top-2 right-2 bg-black/60 rounded-full p-1 text-white">
-                    <X className="w-4 h-4" />
-                  </button>
+                <div className="space-y-2">
+                  <div className="relative">
+                    <img src={cameraConverted} alt="camera gif" className="w-full rounded-xl max-h-60 object-contain bg-black/20" />
+                    {textOverlay && showTextOverlay && (
+                      <div className="absolute top-3 inset-x-0 text-center pointer-events-none px-3">
+                        <p className="text-white font-black text-xl leading-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]"
+                          style={{ WebkitTextStroke: '1px black' }}>{textOverlay}</p>
+                      </div>
+                    )}
+                    <button onClick={() => { setCameraConverted(null); setCameraVideoFile(null); setTextOverlay(''); setShowTextOverlay(false) }}
+                      className="absolute top-2 right-2 bg-black/60 rounded-full p-1 text-white">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  {/* Yazı ekleme */}
+                  <div className="flex gap-2 items-center">
+                    <Type className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    <input className="input flex-1 text-sm py-2" placeholder="GIF üzerine yazı ekle..."
+                      value={textOverlay} onChange={e => setTextOverlay(e.target.value)} />
+                    {textOverlay && (
+                      <button onClick={() => setShowTextOverlay(s => !s)}
+                        className={`text-xs px-2 py-1 rounded-lg border transition-colors ${showTextOverlay ? 'border-brand-500 text-brand-400' : 'border-gray-600 text-gray-500'}`}>
+                        {showTextOverlay ? 'Açık' : 'Kapalı'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -415,12 +463,31 @@ export default function UploadModal({ onClose, onSuccess }) {
                   )}
                 </div>
               ) : (
-                <div className="relative">
-                  <img src={convertedGif} alt="converted" className="w-full rounded-xl max-h-60 object-contain bg-black/20" />
-                  <button onClick={() => { setConvertedGif(null); setVideoFile(null) }}
-                    className="absolute top-2 right-2 bg-black/60 rounded-full p-1 text-white">
-                    <X className="w-4 h-4" />
-                  </button>
+                <div className="space-y-2">
+                  <div className="relative">
+                    <img src={convertedGif} alt="converted" className="w-full rounded-xl max-h-60 object-contain bg-black/20" />
+                    {textOverlay && showTextOverlay && (
+                      <div className="absolute top-3 inset-x-0 text-center pointer-events-none px-3">
+                        <p className="text-white font-black text-xl leading-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]"
+                          style={{ WebkitTextStroke: '1px black' }}>{textOverlay}</p>
+                      </div>
+                    )}
+                    <button onClick={() => { setConvertedGif(null); setVideoFile(null); setTextOverlay(''); setShowTextOverlay(false) }}
+                      className="absolute top-2 right-2 bg-black/60 rounded-full p-1 text-white">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <Type className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    <input className="input flex-1 text-sm py-2" placeholder="GIF üzerine yazı ekle..."
+                      value={textOverlay} onChange={e => setTextOverlay(e.target.value)} />
+                    {textOverlay && (
+                      <button onClick={() => setShowTextOverlay(s => !s)}
+                        className={`text-xs px-2 py-1 rounded-lg border transition-colors ${showTextOverlay ? 'border-brand-500 text-brand-400' : 'border-gray-600 text-gray-500'}`}>
+                        {showTextOverlay ? 'Açık' : 'Kapalı'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
