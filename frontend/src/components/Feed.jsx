@@ -93,10 +93,9 @@ export default function Feed({ mode = 'all' }) {
 
   return (
     <div
-      className="h-full overflow-y-scroll snap-y snap-mandatory"
+      className="h-screen overflow-y-scroll snap-y snap-mandatory"
       style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
     >
-      <style>{`div::-webkit-scrollbar { display: none; }`}</style>
       {posts.map(post => (
         <div key={post.id} className="h-screen snap-start snap-always flex-shrink-0">
           <GIFCard post={post} />

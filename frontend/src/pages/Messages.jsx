@@ -190,7 +190,7 @@ export default function Messages() {
             {conversations.map(conv => {
               const isOnline = onlineUsers.has(conv.profile?.id)
               return (
-                <button key={conv.profile?.id} onClick={() => navigate(`/messages/${conv.profile.id}`)}
+                <button key={conv.profile?.id} onClick={() => navigate(`/inbox/${conv.profile.id}`)}
                   className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left ${activeConv?.profile.id === conv.profile?.id ? 'bg-brand-500/10' : ''}`}>
                   <div className="relative w-10 h-10 flex-shrink-0">
                     <div className="w-10 h-10 rounded-full bg-brand-800 overflow-hidden flex items-center justify-center text-sm font-bold text-brand-200">
@@ -225,7 +225,7 @@ export default function Messages() {
           <div className="flex-1 flex flex-col min-w-0">
             {/* Header */}
             <div className="flex items-center gap-3 px-4 py-3 border-b border-[#2a2a3f]">
-              <button onClick={() => { setActiveConv(null); navigate('/messages') }}
+              <button onClick={() => { setActiveConv(null); navigate('/inbox') }}
                 className="md:hidden text-gray-400 hover:text-white flex-shrink-0">
                 <ArrowLeft className="w-5 h-5" />
               </button>

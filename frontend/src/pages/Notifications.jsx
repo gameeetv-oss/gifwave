@@ -104,7 +104,7 @@ export default function Notifications() {
                     </div>
                   )}
                   {notif.type === 'dm' && (
-                    <Link to={`/messages/${fromUser?.id}`} className="text-xs text-brand-400 hover:underline mt-0.5 block">
+                    <Link to={`/inbox/${fromUser?.id}`} className="text-xs text-brand-400 hover:underline mt-0.5 block">
                       Mesajı görüntüle →
                     </Link>
                   )}

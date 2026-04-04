@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { PresenceProvider } from './context/PresenceContext'
 import { BlockProvider } from './context/BlockContext'
@@ -11,6 +11,7 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Notifications from './pages/Notifications'
 import Messages from './pages/Messages'
+import Inbox from './pages/Inbox'
 import PostDetail from './pages/PostDetail'
 
 function PrivateRoute({ children }) {
@@ -20,26 +21,25 @@ function PrivateRoute({ children }) {
 }
 
 function AppRoutes() {
-  const location = useLocation()
-  const isHome = location.pathname === '/'
-
   return (
-    <div className={isHome ? 'h-screen overflow-hidden' : 'min-h-screen pb-16'}>
+    <>
       <Navbar />
       <Routes>
         <Route path="/" element={<PrivateRoute><Home /></PrivateRoute>} />
-        <Route path="/explore" element={<Explore />} />
+        <Route path="/explore" element={<div className="pb-16"><Explore /></div>} />
         <Route path="/upload" element={<PrivateRoute><Upload /></PrivateRoute>} />
-        <Route path="/notifications" element={<PrivateRoute><Notifications /></PrivateRoute>} />
-        <Route path="/messages" element={<PrivateRoute><Messages /></PrivateRoute>} />
-        <Route path="/messages/:userId" element={<PrivateRoute><Messages /></PrivateRoute>} />
+        <Route path="/inbox" element={<PrivateRoute><div className="pb-16"><Inbox /></div></PrivateRoute>} />
+        <Route path="/inbox/:userId" element={<PrivateRoute><div className="pb-16"><Inbox /></div></PrivateRoute>} />
+        <Route path="/messages" element={<Navigate to="/inbox" />} />
+        <Route path="/messages/:userId" element={<PrivateRoute><div className="pb-16"><Messages /></div></PrivateRoute>} />
+        <Route path="/notifications" element={<PrivateRoute><div className="pb-16"><Notifications /></div></PrivateRoute>} />
         <Route path="/post/:id" element={<PostDetail />} />
         <Route path="/profile/:username" element={<Profile />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
-    </div>
+    </>
   )
 }
 

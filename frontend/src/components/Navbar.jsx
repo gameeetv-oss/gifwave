@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { Home, Compass, Plus, Bell, User, LogOut, MessageSquare } from 'lucide-react'
+import { Home, Compass, Plus, User, MessageSquare } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import UploadModal from './UploadModal'
@@ -69,24 +69,19 @@ export default function Navbar() {
         </button>
 
         <div className="relative">
-          <Link to="/messages" className={`flex flex-col items-center gap-0.5 px-4 py-2 rounded-xl transition-all ${isActive('/messages') ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}>
+          <Link to="/inbox" className={`flex flex-col items-center gap-0.5 px-4 py-2 rounded-xl transition-all ${isActive('/inbox') ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}>
             <MessageSquare className="w-6 h-6" />
-            <span className="text-[10px]">Mesajlar</span>
+            <span className="text-[10px]">Gelen Kutusu</span>
           </Link>
-          {unreadDMs > 0 && (
-            <span className="absolute top-1 right-3 bg-brand-500 text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center font-bold">{unreadDMs > 9 ? '9+' : unreadDMs}</span>
+          {(unread + unreadDMs) > 0 && (
+            <span className="absolute top-1 right-2 bg-red-500 text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center font-bold">{(unread + unreadDMs) > 9 ? '9+' : unread + unreadDMs}</span>
           )}
         </div>
 
-        <div className="relative">
-          <Link to={myProfileLink} className={`flex flex-col items-center gap-0.5 px-4 py-2 rounded-xl transition-all ${isActive('/profile') ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}>
-            <User className="w-6 h-6" />
-            <span className="text-[10px]">Profil</span>
-          </Link>
-          {unread > 0 && (
-            <span className="absolute top-1 right-3 bg-red-500 text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center font-bold">{unread > 9 ? '9+' : unread}</span>
-          )}
-        </div>
+        <Link to={myProfileLink} className={`flex flex-col items-center gap-0.5 px-4 py-2 rounded-xl transition-all ${isActive('/profile') ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}>
+          <User className="w-6 h-6" />
+          <span className="text-[10px]">Profil</span>
+        </Link>
       </nav>
 
       {showUpload && <UploadModal onClose={() => setShowUpload(false)} onSuccess={() => navigate('/')} />}
