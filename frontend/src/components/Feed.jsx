@@ -5,11 +5,23 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useBlock } from '../context/BlockContext'
 
+const AD_EVERY = 5 // Her 5 GIF'te 1 reklam
+const INTERSTITIAL_ID = 'ca-app-pub-3940256099942544/1033173712' // Test ID
+
+async function showInterstitialAd() {
+  try {
+    const { AdMob } = await import('@capacitor-community/admob')
+    await AdMob.prepareInterstitial({ adId: INTERSTITIAL_ID, isTesting: true })
+    await AdMob.showInterstitial()
+  } catch {}
+}
+
 const PAGE_SIZE = 10
 
 export default function Feed({ mode = 'all' }) {
-  const { user } = useAuth()
+  const { user, isPremium } = useAuth()
   const { allBlockedIds } = useBlock()
+  const adCounterRef = useRef(0)
   const [posts, setPosts] = useState([])
   const [hasMore, setHasMore] = useState(true)
   const [loading, setLoading] = useState(false)
@@ -96,8 +108,19 @@ export default function Feed({ mode = 'all' }) {
       className="h-screen overflow-y-scroll snap-y snap-mandatory"
       style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
     >
-      {posts.map(post => (
-        <div key={post.id} className="h-screen snap-start snap-always flex-shrink-0">
+      {posts.map((post, index) => (
+        <div key={post.id} className="h-screen snap-start snap-always flex-shrink-0"
+          onFocus={() => {}}
+          ref={el => {
+            if (!el) return
+            const observer = new IntersectionObserver(([entry]) => {
+              if (entry.isIntersecting && !isPremium) {
+                adCounterRef.current++
+                if (adCounterRef.current % AD_EVERY === 0) showInterstitialAd()
+              }
+            }, { threshold: 0.8 })
+            observer.observe(el)
+          }}>
           <GIFCard post={post} />
         </div>
       ))}

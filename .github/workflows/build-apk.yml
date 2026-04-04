@@ -32,7 +32,7 @@ jobs:
       - name: Install Capacitor
         working-directory: frontend
         run: |
-          npm install @capacitor/core @capacitor/cli @capacitor/android
+          npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor-community/admob
 
       - name: Add Android platform
         working-directory: frontend
@@ -44,10 +44,11 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Add Android permissions
+      - name: Add Android permissions and AdMob
         working-directory: frontend/android
         run: |
           sed -i 's|<uses-permission android:name="android.permission.INTERNET" />|<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-feature android:name="android.hardware.camera" android:required="false" />|' app/src/main/AndroidManifest.xml
+          sed -i 's|</application>|    <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-3940256099942544~3347511713"/>\n    </application>|' app/src/main/AndroidManifest.xml
 
       - name: Patch MainActivity for media autoplay
         working-directory: frontend/android
