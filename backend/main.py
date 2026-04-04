@@ -4,10 +4,14 @@ import tempfile
 import time
 import asyncio
 import httpx
+import string
+import secrets
+from datetime import datetime, timedelta
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Query
+from fastapi import FastAPI, UploadFile, File, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
+from pydantic import BaseModel
 
 app = FastAPI(title="GifWave Backend")
 
@@ -243,6 +247,141 @@ async def extract_music(url: str = Query(...)):
 
     public_url = f"{SUPABASE_URL}/storage/v1/object/public/music/{filename}"
     return {"url": public_url, "title": title}
+
+
+# ── Premium sistemi ───────────────────────────────────────────────────────
+
+def _sb_headers():
+    return {
+        "apikey": SUPABASE_SERVICE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+        "Content-Type": "application/json",
+    }
+
+
+async def _sb_select(table: str, eq: dict = None):
+    params = {"select": "*"}
+    if eq:
+        params.update({k: f"eq.{v}" for k, v in eq.items()})
+    async with httpx.AsyncClient(timeout=10) as c:
+        r = await c.get(f"{SUPABASE_URL}/rest/v1/{table}", params=params, headers=_sb_headers())
+    return r.json() if r.status_code == 200 else []
+
+
+async def _sb_update(table: str, eq: dict, data: dict):
+    params = {k: f"eq.{v}" for k, v in eq.items()}
+    async with httpx.AsyncClient(timeout=10) as c:
+        return await c.patch(f"{SUPABASE_URL}/rest/v1/{table}", params=params, json=data,
+                             headers={**_sb_headers(), "Prefer": "return=representation"})
+
+
+async def _sb_insert(table: str, data):
+    async with httpx.AsyncClient(timeout=10) as c:
+        return await c.post(f"{SUPABASE_URL}/rest/v1/{table}", json=data,
+                            headers={**_sb_headers(), "Prefer": "return=representation"})
+
+
+async def _activate_premium(user_id: str, days: int = 30):
+    until = (datetime.utcnow() + timedelta(days=days)).isoformat() + "Z"
+    await _sb_update("profiles", {"id": user_id}, {"is_premium": True, "premium_until": until})
+
+
+class ActivateCodeRequest(BaseModel):
+    code: str
+    user_id: str
+
+
+class VerifyPaymentRequest(BaseModel):
+    email: str
+    user_id: str
+
+
+class GenerateCodesRequest(BaseModel):
+    count: int = 1
+    admin_key: str
+
+
+ADMIN_KEY = os.getenv("ADMIN_KEY", "gifwave-admin-2024")
+
+
+@app.post("/premium/activate")
+async def premium_activate(req: ActivateCodeRequest):
+    if not SUPABASE_SERVICE_KEY:
+        raise HTTPException(500, "SUPABASE_SERVICE_ROLE_KEY eksik")
+    rows = await _sb_select("premium_codes", {"code": req.code.upper().strip()})
+    if not rows:
+        raise HTTPException(400, "Geçersiz kod")
+    row = rows[0]
+    if row.get("used"):
+        raise HTTPException(400, "Bu kod zaten kullanıldı")
+    await _sb_update("premium_codes", {"id": row["id"]}, {"used": True, "used_by": req.user_id})
+    await _activate_premium(req.user_id)
+    return {"status": "ok"}
+
+
+@app.post("/premium/verify-payment")
+async def premium_verify_payment(req: VerifyPaymentRequest):
+    if not SUPABASE_SERVICE_KEY:
+        raise HTTPException(500, "SUPABASE_SERVICE_ROLE_KEY eksik")
+    rows = await _sb_select("premium_payments", {"email": req.email.lower().strip()})
+    if not rows:
+        raise HTTPException(400, "Bu e-posta ile ödeme bulunamadı. Shopier/Whop'ta kullandığın e-postayı gir.")
+    row = rows[0]
+    if row.get("activated_for"):
+        raise HTTPException(400, "Bu ödeme zaten kullanıldı")
+    await _sb_update("premium_payments", {"id": row["id"]}, {"activated_for": req.user_id})
+    await _activate_premium(req.user_id)
+    return {"status": "ok"}
+
+
+@app.post("/webhooks/whop")
+async def whop_webhook(request: Request):
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(400, "Geçersiz JSON")
+    event = data.get("event", "")
+    if event not in ("payment.completed", "membership.went_valid"):
+        return {"status": "ignored"}
+    d = data.get("data", {})
+    email = d.get("user", {}).get("email") or d.get("email")
+    if not email:
+        return {"status": "no_email"}
+    await _sb_insert("premium_payments", {
+        "email": email.lower().strip(), "provider": "whop", "payload": str(data)[:500]
+    })
+    return {"status": "ok"}
+
+
+@app.post("/webhooks/shopier")
+async def shopier_webhook(request: Request):
+    try:
+        body = await request.body()
+        from urllib.parse import parse_qs
+        flat = {k: v[0] for k, v in parse_qs(body.decode("utf-8", errors="ignore")).items()}
+    except Exception:
+        raise HTTPException(400, "Geçersiz veri")
+    email = flat.get("buyer_email", "").strip()
+    status = flat.get("payment_status", "")
+    if status != "1" or not email:
+        return {"status": "ignored"}
+    await _sb_insert("premium_payments", {
+        "email": email.lower(), "provider": "shopier", "payload": str(flat)[:500]
+    })
+    return {"status": "ok"}
+
+
+@app.post("/admin/generate-codes")
+async def generate_codes(req: GenerateCodesRequest):
+    if req.admin_key != ADMIN_KEY:
+        raise HTTPException(403, "Yetkisiz")
+    alphabet = string.ascii_uppercase + string.digits
+    codes = []
+    for _ in range(min(req.count, 50)):
+        parts = ["".join(secrets.choice(alphabet) for _ in range(4)) for _ in range(3)]
+        codes.append("-".join(parts))
+    r = await _sb_insert("premium_codes", [{"code": c, "used": False} for c in codes])
+    return {"codes": codes, "inserted": r.status_code in (200, 201)}
 
 
 if __name__ == "__main__":

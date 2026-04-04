@@ -21,7 +21,7 @@ export default function PostDetail() {
     setLoading(true)
     const query = supabase
       .from('posts')
-      .select(`*, profiles(username, display_name, avatar_url, is_verified, show_online_status)`)
+      .select(`*, profiles(username, display_name, avatar_url, is_verified, show_online_status, is_premium, premium_until)`)
       .eq('id', id)
       .single()
 

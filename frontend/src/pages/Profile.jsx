@@ -21,7 +21,7 @@ const TABS = [
 export default function Profile() {
   const { username } = useParams()
   const navigate = useNavigate()
-  const { user, profile: myProfile, fetchProfile } = useAuth()
+  const { user, profile: myProfile, fetchProfile, isPremium } = useAuth()
 
   const [profile, setProfile]       = useState(null)
   const [tab, setTab]               = useState('posts')
@@ -65,13 +65,13 @@ export default function Profile() {
 
     const [postsRes, repostsRes, likedRes] = await Promise.all([
       supabase.from('posts')
-        .select('*, profiles!fk_posts_profiles(username, display_name, avatar_url, is_verified)')
+        .select('*, profiles!fk_posts_profiles(username, display_name, avatar_url, is_verified, is_premium, premium_until)')
         .eq('user_id', prof.id).order('created_at', { ascending: false }),
       supabase.from('reposts')
-        .select('post_id, created_at, posts(*, profiles!fk_posts_profiles(username, display_name, avatar_url, is_verified))')
+        .select('post_id, created_at, posts(*, profiles!fk_posts_profiles(username, display_name, avatar_url, is_verified, is_premium, premium_until))')
         .eq('user_id', prof.id).order('created_at', { ascending: false }),
       supabase.from('likes')
-        .select('post_id, created_at, posts(*, profiles!fk_posts_profiles(username, display_name, avatar_url, is_verified))')
+        .select('post_id, created_at, posts(*, profiles!fk_posts_profiles(username, display_name, avatar_url, is_verified, is_premium, premium_until))')
         .eq('user_id', prof.id).order('created_at', { ascending: false }),
     ])
 
@@ -194,6 +194,8 @@ export default function Profile() {
   async function uploadAvatar(e) {
     const file = e.target.files[0]
     if (!file) return
+    const isGif = file.type === 'image/gif' || file.name.endsWith('.gif')
+    if (isGif && !isPremium) { toast.error('Hareketli profil fotoğrafı Premium özelliğidir!'); return }
     const ext = file.name.split('.').pop()
     const path = `avatars/${user.id}.${ext}`
     const { error } = await supabase.storage.from('gifs').upload(path, file, { upsert: true })
@@ -267,7 +269,7 @@ export default function Profile() {
             {isMe && (
               <label className="absolute -bottom-1 -right-1 bg-brand-500 rounded-full p-1.5 cursor-pointer hover:bg-brand-600 transition-colors z-10">
                 <Camera className="w-3.5 h-3.5 text-white" />
-                <input type="file" accept="image/*" className="hidden" onChange={uploadAvatar} />
+                <input type="file" accept="image/*,image/gif" className="hidden" onChange={uploadAvatar} />
               </label>
             )}
             {!isMe && onlineUsers.has(profile.id) && profile.show_online_status !== false && (

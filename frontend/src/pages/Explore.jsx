@@ -59,7 +59,7 @@ export default function Explore() {
     setLoading(true)
     const [postsRes, giphyRes] = await Promise.all([
       supabase.from('posts')
-        .select('*, profiles!fk_posts_profiles(username, display_name, avatar_url)')
+        .select('*, profiles!fk_posts_profiles(username, display_name, avatar_url, is_verified, is_premium, premium_until)')
         .order('likes_count', { ascending: false })
         .limit(10),
       fetch(`${BACKEND_URL}/giphy/trending?limit=24`).then(r => r.json()).catch(() => ({ gifs: [], next: '' }))
@@ -126,7 +126,7 @@ export default function Explore() {
       const tag = trimmed.slice(1)
       const { data } = await supabase
         .from('posts')
-        .select('*, profiles!fk_posts_profiles(username, display_name, avatar_url)')
+        .select('*, profiles!fk_posts_profiles(username, display_name, avatar_url, is_verified, is_premium, premium_until)')
         .contains('tags', [tag])
         .order('created_at', { ascending: false })
       setSearchResults(data || [])

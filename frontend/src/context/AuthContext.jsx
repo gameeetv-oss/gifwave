@@ -38,8 +38,10 @@ export function AuthProvider({ children }) {
     await supabase.auth.signOut()
   }
 
+  const isPremium = !!(profile?.is_premium && (!profile?.premium_until || new Date(profile.premium_until) > new Date()))
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signOut, fetchProfile }}>
+    <AuthContext.Provider value={{ user, profile, loading, signOut, fetchProfile, isPremium }}>
       {children}
     </AuthContext.Provider>
   )

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useInView } from 'react-intersection-observer'
-import { Heart, MessageCircle, Share2, Repeat2, MoreHorizontal, Pencil, Check, X, Loader2, Trash2, BadgeCheck, Play, Pause, Music, ExternalLink, VolumeX, Volume2 } from 'lucide-react'
+import { Heart, MessageCircle, Share2, Repeat2, MoreHorizontal, Pencil, Check, X, Loader2, Trash2, BadgeCheck, Play, Pause, Music, ExternalLink, VolumeX, Volume2, Crown } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
@@ -270,6 +270,7 @@ export default function GIFCard({ post, onDelete }) {
             <div className="flex items-center gap-1">
               <span className="text-white font-bold text-sm drop-shadow">{displayName}</span>
               {post.profiles?.is_verified && <BadgeCheck className="w-3.5 h-3.5 text-blue-400" />}
+              {post.profiles?.is_premium && (!post.profiles?.premium_until || new Date(post.profiles.premium_until) > new Date()) && <Crown className="w-3.5 h-3.5 text-yellow-400" />}
             </div>
           </Link>
 

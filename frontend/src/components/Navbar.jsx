@@ -1,17 +1,19 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { Home, Compass, Plus, User, MessageSquare } from 'lucide-react'
+import { Home, Compass, Plus, User, MessageSquare, Crown } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import UploadModal from './UploadModal'
+import Premium from '../pages/Premium'
 
 export default function Navbar() {
-  const { user, profile, signOut } = useAuth()
+  const { user, profile, signOut, isPremium } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [unread, setUnread] = useState(0)
   const [unreadDMs, setUnreadDMs] = useState(0)
   const [showUpload, setShowUpload] = useState(false)
+  const [showPremium, setShowPremium] = useState(false)
 
   const myProfileLink = profile?.username
     ? `/profile/${profile.username}`
@@ -78,13 +80,20 @@ export default function Navbar() {
           )}
         </div>
 
-        <Link to={myProfileLink} className={`flex flex-col items-center gap-0.5 px-4 py-2 rounded-xl transition-all ${isActive('/profile') ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}>
+        <button onClick={() => setShowPremium(true)}
+          className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl transition-all ${isPremium ? 'text-yellow-400' : 'text-gray-500 hover:text-gray-300'}`}>
+          <Crown className="w-6 h-6" />
+          <span className="text-[10px]">Premium</span>
+        </button>
+
+        <Link to={myProfileLink} className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl transition-all ${isActive('/profile') ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}>
           <User className="w-6 h-6" />
           <span className="text-[10px]">Profil</span>
         </Link>
       </nav>
 
       {showUpload && <UploadModal onClose={() => setShowUpload(false)} onSuccess={() => navigate('/')} />}
+      {showPremium && <Premium onClose={() => setShowPremium(false)} />}
     </>
   )
 }

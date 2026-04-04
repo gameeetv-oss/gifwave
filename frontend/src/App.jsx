@@ -15,6 +15,7 @@ import Notifications from './pages/Notifications'
 import Messages from './pages/Messages'
 import Inbox from './pages/Inbox'
 import PostDetail from './pages/PostDetail'
+import Premium from './pages/Premium'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -41,6 +42,7 @@ function AppRoutes() {
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/premium" element={<PrivateRoute><div className="pb-16"><Premium /></div></PrivateRoute>} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </>

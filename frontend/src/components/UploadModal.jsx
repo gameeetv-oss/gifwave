@@ -77,7 +77,7 @@ function OverlayPreview({ textOverlay, showTextOverlay, textSize, textColor, tex
 }
 
 export default function UploadModal({ onClose, onSuccess }) {
-  const { user } = useAuth()
+  const { user, isPremium } = useAuth()
   const [tab, setTab] = useState('upload')
   const [caption, setCaption] = useState('')
   const [tags, setTags] = useState('')
@@ -303,6 +303,16 @@ export default function UploadModal({ onClose, onSuccess }) {
     if (!user) return
     setLoading(true)
     try {
+      // Ücretsiz kullanıcı: günlük 5 paylaşım limiti
+      if (!isPremium) {
+        const today = new Date(); today.setHours(0, 0, 0, 0)
+        const { count } = await supabase.from('posts').select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id).gte('created_at', today.toISOString())
+        if ((count || 0) >= 5) {
+          toast.error('Günlük 5 paylaşım limitine ulaştın. Premium al, sınırsız paylaş!')
+          setLoading(false); return
+        }
+      }
       let gifUrl = null
       let source = 'upload'
 
