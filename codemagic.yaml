@@ -22,10 +22,7 @@ workflows:
           cd frontend
           ./node_modules/.bin/cap add ios || true
           # Minimum iOS deployment target ayarla
-          # Minimum iOS deployment target 13.0 olarak zorla
-          head -1 ios/App/Podfile
-          { echo "platform :ios, '13.0'"; cat ios/App/Podfile; } > /tmp/Podfile_new && mv /tmp/Podfile_new ios/App/Podfile
-          head -3 ios/App/Podfile
+          cat ios/App/Podfile
           cat ios/App/Podfile
           ./node_modules/.bin/cap copy ios
 
