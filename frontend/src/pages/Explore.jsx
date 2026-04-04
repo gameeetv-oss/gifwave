@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Search, TrendingUp, Hash, Loader2, Repeat2, Pencil, X, Check, ChevronLeft, ChevronRight, Music, Trash2 } from 'lucide-react'
+import { Search, TrendingUp, Hash, Loader2, Repeat2, Pencil, X, Check, ChevronLeft, ChevronRight, Music, Trash2, UserPlus, UserMinus, Clock } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -33,6 +33,7 @@ export default function Explore() {
   const [searchGifNext, setSearchGifNext] = useState('')
   const [searchGifLoading, setSearchGifLoading] = useState(false)
   const lastSearchQuery = useRef('')
+  const [followStatuses, setFollowStatuses] = useState({}) // userId -> null|'pending'|'accepted'
 
   // Ekle ve Düzenle modali
   const [editGif, setEditGif] = useState(null)
@@ -132,6 +133,17 @@ export default function Explore() {
     } else {
       const { data } = await supabase.from('profiles').select('*').ilike('username', `%${trimmed}%`).limit(20)
       setSearchResults(data || [])
+      // Follow statülerini yükle
+      if (user && data?.length > 0) {
+        const ids = data.map(u => u.id).filter(id => id !== user.id)
+        if (ids.length > 0) {
+          const { data: follows } = await supabase.from('follows').select('following_id,status')
+            .eq('follower_id', user.id).in('following_id', ids)
+          const map = {}
+          follows?.forEach(f => { map[f.following_id] = f.status })
+          setFollowStatuses(map)
+        }
+      }
     }
     setLoading(false)
 
@@ -261,6 +273,21 @@ export default function Explore() {
       setEditGif(null)
     } else {
       toast.error('Hata oluştu')
+    }
+  }
+
+  async function toggleFollow(targetId) {
+    if (!user) { toast.error('Giriş yap'); return }
+    const current = followStatuses[targetId]
+    if (current === 'accepted' || current === 'pending') {
+      await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', targetId)
+      setFollowStatuses(s => ({ ...s, [targetId]: null }))
+    } else {
+      const { error } = await supabase.from('follows').insert({ follower_id: user.id, following_id: targetId, status: 'accepted' })
+      if (!error) {
+        setFollowStatuses(s => ({ ...s, [targetId]: 'accepted' }))
+        supabase.from('notifications').insert({ user_id: targetId, type: 'follow', from_user_id: user.id })
+      }
     }
   }
 
@@ -449,19 +476,34 @@ export default function Explore() {
               </h2>
               {isUserSearch ? (
                 <div className="space-y-3">
-                  {searchResults.map(u => (
-                    <Link key={u.id} to={`/profile/${u.username}`}
-                      className="card flex items-center gap-4 p-4 hover:border-brand-500/50 transition-all">
-                      <div className="w-12 h-12 rounded-full bg-brand-800 flex items-center justify-center text-lg font-bold text-brand-200 overflow-hidden flex-shrink-0">
-                        {u.avatar_url ? <img src={u.avatar_url} alt="" className="w-full h-full object-cover" /> : u.username?.[0]?.toUpperCase()}
+                  {searchResults.map(u => {
+                    const fs = followStatuses[u.id]
+                    const isMe = user?.id === u.id
+                    return (
+                      <div key={u.id} className="card flex items-center gap-4 p-4 hover:border-brand-500/50 transition-all">
+                        <Link to={`/profile/${u.username}`} className="w-12 h-12 rounded-full bg-brand-800 flex items-center justify-center text-lg font-bold text-brand-200 overflow-hidden flex-shrink-0">
+                          {u.avatar_url ? <img src={u.avatar_url} alt="" className="w-full h-full object-cover" /> : u.username?.[0]?.toUpperCase()}
+                        </Link>
+                        <Link to={`/profile/${u.username}`} className="flex-1 min-w-0">
+                          <p className="font-semibold truncate">{u.display_name || u.username}</p>
+                          <p className="text-gray-500 text-sm">@{u.username}</p>
+                          {u.bio && <p className="text-gray-600 text-xs mt-0.5 line-clamp-1">{u.bio}</p>}
+                        </Link>
+                        {!isMe && user && (
+                          <button onClick={() => toggleFollow(u.id)}
+                            className={`flex-shrink-0 flex items-center gap-1 text-xs px-3 py-1.5 rounded-xl font-medium transition-all ${
+                              fs === 'accepted' ? 'bg-white/10 text-gray-300 hover:bg-red-500/10 hover:text-red-400'
+                              : fs === 'pending' ? 'bg-yellow-500/10 text-yellow-400'
+                              : 'btn-primary'
+                            }`}>
+                            {fs === 'accepted' ? <><UserMinus className="w-3.5 h-3.5" /> Takip Ediliyor</>
+                              : fs === 'pending' ? <><Clock className="w-3.5 h-3.5" /> İstek Gönderildi</>
+                              : <><UserPlus className="w-3.5 h-3.5" /> Takip Et</>}
+                          </button>
+                        )}
                       </div>
-                      <div>
-                        <p className="font-semibold">{u.display_name || u.username}</p>
-                        <p className="text-gray-500 text-sm">@{u.username}</p>
-                        {u.bio && <p className="text-gray-600 text-xs mt-0.5 line-clamp-1">{u.bio}</p>}
-                      </div>
-                    </Link>
-                  ))}
+                    )
+                  })}
                 </div>
               ) : (
                 <div className="space-y-4">

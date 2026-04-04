@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useInView } from 'react-intersection-observer'
-import { Heart, MessageCircle, Share2, Repeat2, MoreHorizontal, Pencil, Check, X, Loader2, Trash2, BadgeCheck, Play, Pause, Music, ExternalLink } from 'lucide-react'
+import { Heart, MessageCircle, Share2, Repeat2, MoreHorizontal, Pencil, Check, X, Loader2, Trash2, BadgeCheck, Play, Pause, Music, ExternalLink, VolumeX, Volume2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
@@ -34,7 +34,9 @@ export default function GIFCard({ post, onDelete }) {
   const [showMenu, setShowMenu] = useState(false)
   const [editMode, setEditMode] = useState(false)
   const [editCaption, setEditCaption] = useState(post.caption || '')
-  const [editOverlay, setEditOverlay] = useState(post.text_overlay || '')
+  const [editOverlay, setEditOverlay] = useState(() => {
+    try { const p = JSON.parse(post.text_overlay || ''); return p.text || '' } catch { return post.text_overlay || '' }
+  })
   const [showOverlay, setShowOverlay] = useState(post.show_overlay || false)
   const [saving, setSaving] = useState(false)
   const [currentPost, setCurrentPost] = useState(post)
@@ -55,6 +57,8 @@ export default function GIFCard({ post, onDelete }) {
   const [ytTitle, setYtTitle] = useState('YouTube Müziği')
   const [ytMounted, setYtMounted] = useState(false)
   const [audioSrc, setAudioSrc] = useState(null)
+  const [audioPlaying, setAudioPlaying] = useState(false)
+  const [needsTap, setNeedsTap] = useState(false)
 
   useEffect(() => {
     if (musicInView && ytMusicId && !ytMounted) setYtMounted(true)
@@ -92,23 +96,28 @@ export default function GIFCard({ post, onDelete }) {
     const p = ytPlayerRef.current
     if (!ytReady || !p) return
     if (musicInView) {
-      if (isMobile) {
-        if (userStartedRef.current) { try { p.playVideo() } catch {}; setYtPlaying(true) }
+      if (userStartedRef.current) {
+        try { p.unMute(); p.setVolume(100); p.playVideo() } catch {}
+        setYtPlaying(true)
       } else {
-        try { p.unMute(); p.setVolume(100); p.playVideo() } catch {}; setYtPlaying(true)
+        // İlk kez - sesi kapalı başlat, kullanıcı dokunana kadar bekle
+        try { p.mute(); p.playVideo() } catch {}
+        setNeedsTap(true)
       }
     } else {
-      try { p.mute(); p.pauseVideo() } catch {}; setYtPlaying(false)
+      try { p.mute(); p.pauseVideo() } catch {}
+      setYtPlaying(false)
     }
   }, [musicInView, ytReady])
 
   function toggleYt() {
     const p = ytPlayerRef.current
     if (!p) return
+    userStartedRef.current = true
+    setNeedsTap(false)
     if (ytPlaying) {
       try { p.mute(); p.pauseVideo() } catch {}; setYtPlaying(false)
     } else {
-      userStartedRef.current = true
       try { p.unMute(); p.setVolume(100); p.playVideo() } catch {}; setYtPlaying(true)
     }
   }
@@ -120,9 +129,29 @@ export default function GIFCard({ post, onDelete }) {
 
   useEffect(() => {
     if (!audioRef.current || !audioSrc) return
-    if (musicInView) audioRef.current.play().catch(() => {})
-    else audioRef.current.pause()
+    if (musicInView) {
+      audioRef.current.play().then(() => {
+        setAudioPlaying(true)
+        setNeedsTap(false)
+      }).catch(() => setNeedsTap(true))
+    } else {
+      audioRef.current.pause()
+      setAudioPlaying(false)
+    }
   }, [musicInView, audioSrc])
+
+  function toggleAudio() {
+    if (!audioRef.current) return
+    if (audioPlaying) {
+      audioRef.current.pause()
+      setAudioPlaying(false)
+    } else {
+      audioRef.current.play().then(() => {
+        setAudioPlaying(true)
+        setNeedsTap(false)
+      }).catch(() => {})
+    }
+  }
   // ───────────────────────────────────────────────────────────
 
   const isOwner = user?.id === post.user_id
@@ -206,15 +235,21 @@ export default function GIFCard({ post, onDelete }) {
           loading="lazy"
         />
 
-        {/* Metin overlay (meme tarzı) */}
-        {currentPost.show_overlay && currentPost.text_overlay && (
-          <div className="absolute top-16 inset-x-0 px-4 text-center z-10 pointer-events-none">
-            <p className="text-white font-black text-2xl leading-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]"
-              style={{ WebkitTextStroke: '1px black' }}>
-              {currentPost.text_overlay}
-            </p>
-          </div>
-        )}
+        {/* Metin overlay */}
+        {currentPost.show_overlay && currentPost.text_overlay && (() => {
+          let ov = { text: currentPost.text_overlay, size: 26, color: '#ffffff', pos: 'top', bold: true }
+          try { const p = JSON.parse(currentPost.text_overlay); if (p.text) ov = p } catch {}
+          const posClass = ov.pos === 'center' ? 'top-1/2 -translate-y-1/2' : ov.pos === 'bottom' ? 'bottom-20' : 'top-14'
+          return (
+            <div className={`absolute inset-x-0 ${posClass} px-4 text-center z-10 pointer-events-none`}>
+              <p style={{ fontSize: ov.size, color: ov.color, fontWeight: ov.bold ? 800 : 400,
+                textShadow: '0 2px 10px rgba(0,0,0,0.95)', WebkitTextStroke: ov.bold ? '0.5px rgba(0,0,0,0.4)' : 'none' }}
+                className="leading-tight">
+                {ov.text}
+              </p>
+            </div>
+          )
+        })()}
 
         {/* Alt gradient */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent pointer-events-none" />
@@ -263,26 +298,31 @@ export default function GIFCard({ post, onDelete }) {
                   style={{ position: 'fixed', left: '-400px', top: '50%', width: '200px', height: '112px', pointerEvents: 'none' }} />
               )}
               {ytMusicId ? (
-                isMobile ? (
-                  <a href={`https://music.youtube.com/watch?v=${ytMusicId}`} target="_blank" rel="noopener noreferrer"
+                <button onClick={toggleYt}
+                  className="flex items-center gap-2 bg-white/10 backdrop-blur rounded-full px-3 py-1.5 w-fit">
+                  {needsTap
+                    ? <VolumeX className="w-3.5 h-3.5 text-white animate-pulse" />
+                    : ytPlaying
+                    ? <Pause className="w-3.5 h-3.5 text-white" />
+                    : <Play className="w-3.5 h-3.5 text-white fill-white" />}
+                  <Music className={`w-3.5 h-3.5 text-white ${ytPlaying ? 'animate-spin' : ''}`} style={{ animationDuration: '3s' }} />
+                  <span className="text-white text-xs max-w-[160px] truncate">{needsTap ? 'Sese dokun' : ytTitle}</span>
+                  {!ytReady && <Loader2 className="w-3 h-3 text-white/60 animate-spin" />}
+                </button>
+              ) : audioSrc ? (
+                <>
+                  <audio ref={audioRef} src={audioSrc} loop className="hidden" />
+                  <button onClick={toggleAudio}
                     className="flex items-center gap-2 bg-white/10 backdrop-blur rounded-full px-3 py-1.5 w-fit">
-                    <Music className="w-3.5 h-3.5 text-white animate-spin" style={{ animationDuration: '3s' }} />
-                    <span className="text-white text-xs max-w-[160px] truncate">{ytTitle}</span>
-                    <ExternalLink className="w-3 h-3 text-white/60" />
-                  </a>
-                ) : (
-                  <button onClick={toggleYt}
-                    className="flex items-center gap-2 bg-white/10 backdrop-blur rounded-full px-3 py-1.5 w-fit">
-                    {ytPlaying
+                    {needsTap
+                      ? <VolumeX className="w-3.5 h-3.5 text-white animate-pulse" />
+                      : audioPlaying
                       ? <Pause className="w-3.5 h-3.5 text-white" />
                       : <Play className="w-3.5 h-3.5 text-white fill-white" />}
-                    <Music className={`w-3.5 h-3.5 text-white ${ytPlaying ? 'animate-spin' : ''}`} style={{ animationDuration: '3s' }} />
-                    <span className="text-white text-xs max-w-[160px] truncate">{ytTitle}</span>
-                    {!ytReady && <Loader2 className="w-3 h-3 text-white/60 animate-spin" />}
+                    <Music className={`w-3.5 h-3.5 text-white ${audioPlaying ? 'animate-spin' : ''}`} style={{ animationDuration: '3s' }} />
+                    <span className="text-white text-xs">{needsTap ? 'Sese dokun' : audioPlaying ? 'Çalıyor' : 'Oynat'}</span>
                   </button>
-                )
-              ) : audioSrc ? (
-                <audio ref={audioRef} src={audioSrc} loop className="hidden" />
+                </>
               ) : null}
             </div>
           )}

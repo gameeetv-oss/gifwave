@@ -49,6 +49,26 @@ jobs:
         run: |
           sed -i 's|<uses-permission android:name="android.permission.INTERNET" />|<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-feature android:name="android.hardware.camera" android:required="false" />|' app/src/main/AndroidManifest.xml
 
+      - name: Patch MainActivity for media autoplay
+        working-directory: frontend/android
+        run: |
+          cat > app/src/main/java/com/gifwave/app/MainActivity.java << 'EOF'
+          package com.gifwave.app;
+          import android.os.Bundle;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import com.getcapacitor.BridgeActivity;
+          public class MainActivity extends BridgeActivity {
+              @Override
+              public void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  WebView webView = getBridge().getWebView();
+                  WebSettings settings = webView.getSettings();
+                  settings.setMediaPlaybackRequiresUserGesture(false);
+              }
+          }
+          EOF
+
       - name: Fix Kotlin stdlib conflict
         working-directory: frontend/android
         run: |

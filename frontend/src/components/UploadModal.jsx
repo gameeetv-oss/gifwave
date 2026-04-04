@@ -6,6 +6,76 @@ import toast from 'react-hot-toast'
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
 
+function TextOverlayEditor({ textOverlay, setTextOverlay, showTextOverlay, setShowTextOverlay,
+  textSize, setTextSize, textColor, setTextColor, textPos, setTextPos, textBold, setTextBold,
+  TEXT_COLORS, TEXT_POS_LABEL }) {
+  return (
+    <div className="space-y-2 bg-[#12121e] border border-[#2a2a3f] rounded-xl p-3">
+      <div className="flex gap-2 items-center">
+        <Type className="w-4 h-4 text-gray-400 flex-shrink-0" />
+        <input className="input flex-1 text-sm py-1.5" placeholder="Yazı ekle..."
+          value={textOverlay} onChange={e => { setTextOverlay(e.target.value); if (e.target.value) setShowTextOverlay(true) }} />
+        {textOverlay && (
+          <button onClick={() => setShowTextOverlay(s => !s)}
+            className={`text-xs px-2 py-1 rounded-lg border transition-colors flex-shrink-0 ${showTextOverlay ? 'border-brand-500 text-brand-400 bg-brand-500/10' : 'border-gray-600 text-gray-500'}`}>
+            {showTextOverlay ? 'Görünür' : 'Gizli'}
+          </button>
+        )}
+      </div>
+      {textOverlay && (
+        <>
+          {/* Boyut */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 w-10">Boyut</span>
+            <input type="range" min={14} max={52} value={textSize} onChange={e => setTextSize(+e.target.value)}
+              className="flex-1 accent-brand-500 h-1" />
+            <span className="text-xs text-gray-400 w-6 text-right">{textSize}</span>
+            <button onClick={() => setTextBold(b => !b)}
+              className={`text-xs px-2 py-0.5 rounded font-bold border transition-colors ${textBold ? 'border-brand-500 text-brand-400' : 'border-gray-600 text-gray-500'}`}>B</button>
+          </div>
+          {/* Renk */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 w-10">Renk</span>
+            <div className="flex gap-1.5">
+              {TEXT_COLORS.map(c => (
+                <button key={c} onClick={() => setTextColor(c)}
+                  style={{ background: c }}
+                  className={`w-5 h-5 rounded-full border-2 transition-all ${textColor === c ? 'border-white scale-125' : 'border-transparent'}`} />
+              ))}
+            </div>
+          </div>
+          {/* Konum */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 w-10">Konum</span>
+            <div className="flex gap-1">
+              {Object.entries(TEXT_POS_LABEL).map(([pos, label]) => (
+                <button key={pos} onClick={() => setTextPos(pos)}
+                  className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${textPos === pos ? 'border-brand-500 text-brand-400 bg-brand-500/10' : 'border-gray-600 text-gray-500 hover:border-gray-400'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function OverlayPreview({ textOverlay, showTextOverlay, textSize, textColor, textPos, textBold }) {
+  if (!textOverlay || !showTextOverlay) return null
+  const pos = textPos === 'top' ? 'top-3' : textPos === 'center' ? 'top-1/2 -translate-y-1/2' : 'bottom-3'
+  return (
+    <div className={`absolute inset-x-0 ${pos} text-center pointer-events-none px-3`}>
+      <p style={{ fontSize: textSize, color: textColor, fontWeight: textBold ? 800 : 400,
+        textShadow: '0 2px 8px rgba(0,0,0,0.9)', WebkitTextStroke: textBold ? '0.5px rgba(0,0,0,0.5)' : 'none' }}
+        className="leading-tight">
+        {textOverlay}
+      </p>
+    </div>
+  )
+}
+
 export default function UploadModal({ onClose, onSuccess }) {
   const { user } = useAuth()
   const [tab, setTab] = useState('upload')
@@ -54,6 +124,13 @@ export default function UploadModal({ onClose, onSuccess }) {
   // Text overlay
   const [textOverlay, setTextOverlay] = useState('')
   const [showTextOverlay, setShowTextOverlay] = useState(false)
+  const [textSize, setTextSize] = useState(24) // px
+  const [textColor, setTextColor] = useState('#ffffff')
+  const [textPos, setTextPos] = useState('top') // top | center | bottom
+  const [textBold, setTextBold] = useState(true)
+
+  const TEXT_COLORS = ['#ffffff','#000000','#ffff00','#ff3b3b','#3bdfff','#3bff6e','#ff8c00','#ff3bff']
+  const TEXT_POS_LABEL = { top: 'Üst', center: 'Orta', bottom: 'Alt' }
 
   useEffect(() => {
     return () => stopCamera()
@@ -274,7 +351,7 @@ export default function UploadModal({ onClose, onSuccess }) {
       const { error } = await supabase.from('posts').insert({
         user_id: user.id, gif_url: gifUrl, caption: caption.trim() || null,
         tags: tagArr, source, music_url: musicUrl.trim() || null,
-        text_overlay: textOverlay.trim() || null,
+        text_overlay: textOverlay.trim() ? JSON.stringify({ text: textOverlay.trim(), size: textSize, color: textColor, pos: textPos, bold: textBold }) : null,
         show_overlay: showTextOverlay && !!textOverlay.trim(),
         likes_count: 0, comments_count: 0
       })
@@ -391,13 +468,7 @@ export default function UploadModal({ onClose, onSuccess }) {
                     <span className="text-white text-xs">Kayıt</span>
                   </div>
                 )}
-                {/* Yazı overlay önizleme */}
-                {cameraConverted && textOverlay && showTextOverlay && (
-                  <div className="absolute top-4 inset-x-0 text-center pointer-events-none px-3">
-                    <p className="text-white font-black text-xl leading-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]"
-                      style={{ WebkitTextStroke: '1px black' }}>{textOverlay}</p>
-                  </div>
-                )}
+                {cameraConverted && <OverlayPreview textOverlay={textOverlay} showTextOverlay={showTextOverlay} textSize={textSize} textColor={textColor} textPos={textPos} textBold={textBold} />}
               </div>
 
               {cameraActive && !recording && cameraMode === 'photo' && (
@@ -422,28 +493,19 @@ export default function UploadModal({ onClose, onSuccess }) {
                 <div className="space-y-2">
                   <div className="relative">
                     <img src={capturedPhoto.url} alt="foto" className="w-full rounded-xl max-h-60 object-contain bg-black/20" />
-                    {textOverlay && showTextOverlay && (
-                      <div className="absolute top-3 inset-x-0 text-center pointer-events-none px-3">
-                        <p className="text-white font-black text-xl leading-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]"
-                          style={{ WebkitTextStroke: '1px black' }}>{textOverlay}</p>
-                      </div>
-                    )}
+                    <OverlayPreview textOverlay={textOverlay} showTextOverlay={showTextOverlay} textSize={textSize} textColor={textColor} textPos={textPos} textBold={textBold} />
                     <button onClick={() => { setCapturedPhoto(null); setTextOverlay(''); setShowTextOverlay(false) }}
                       className="absolute top-2 right-2 bg-black/60 rounded-full p-1 text-white">
                       <X className="w-4 h-4" />
                     </button>
                   </div>
-                  <div className="flex gap-2 items-center">
-                    <Type className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                    <input className="input flex-1 text-sm py-2" placeholder="Fotoğraf üzerine yazı ekle..."
-                      value={textOverlay} onChange={e => setTextOverlay(e.target.value)} />
-                    {textOverlay && (
-                      <button onClick={() => setShowTextOverlay(s => !s)}
-                        className={`text-xs px-2 py-1 rounded-lg border transition-colors ${showTextOverlay ? 'border-brand-500 text-brand-400' : 'border-gray-600 text-gray-500'}`}>
-                        {showTextOverlay ? 'Açık' : 'Kapalı'}
-                      </button>
-                    )}
-                  </div>
+                  <TextOverlayEditor textOverlay={textOverlay} setTextOverlay={setTextOverlay}
+                    showTextOverlay={showTextOverlay} setShowTextOverlay={setShowTextOverlay}
+                    textSize={textSize} setTextSize={setTextSize}
+                    textColor={textColor} setTextColor={setTextColor}
+                    textPos={textPos} setTextPos={setTextPos}
+                    textBold={textBold} setTextBold={setTextBold}
+                    TEXT_COLORS={TEXT_COLORS} TEXT_POS_LABEL={TEXT_POS_LABEL} />
                 </div>
               )}
               {cameraVideoFile && !cameraConverted && (
@@ -458,29 +520,19 @@ export default function UploadModal({ onClose, onSuccess }) {
                 <div className="space-y-2">
                   <div className="relative">
                     <img src={cameraConverted} alt="camera gif" className="w-full rounded-xl max-h-60 object-contain bg-black/20" />
-                    {textOverlay && showTextOverlay && (
-                      <div className="absolute top-3 inset-x-0 text-center pointer-events-none px-3">
-                        <p className="text-white font-black text-xl leading-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]"
-                          style={{ WebkitTextStroke: '1px black' }}>{textOverlay}</p>
-                      </div>
-                    )}
+                    <OverlayPreview textOverlay={textOverlay} showTextOverlay={showTextOverlay} textSize={textSize} textColor={textColor} textPos={textPos} textBold={textBold} />
                     <button onClick={() => { setCameraConverted(null); setCameraVideoFile(null); setTextOverlay(''); setShowTextOverlay(false) }}
                       className="absolute top-2 right-2 bg-black/60 rounded-full p-1 text-white">
                       <X className="w-4 h-4" />
                     </button>
                   </div>
-                  {/* Yazı ekleme */}
-                  <div className="flex gap-2 items-center">
-                    <Type className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                    <input className="input flex-1 text-sm py-2" placeholder="GIF üzerine yazı ekle..."
-                      value={textOverlay} onChange={e => setTextOverlay(e.target.value)} />
-                    {textOverlay && (
-                      <button onClick={() => setShowTextOverlay(s => !s)}
-                        className={`text-xs px-2 py-1 rounded-lg border transition-colors ${showTextOverlay ? 'border-brand-500 text-brand-400' : 'border-gray-600 text-gray-500'}`}>
-                        {showTextOverlay ? 'Açık' : 'Kapalı'}
-                      </button>
-                    )}
-                  </div>
+                  <TextOverlayEditor textOverlay={textOverlay} setTextOverlay={setTextOverlay}
+                    showTextOverlay={showTextOverlay} setShowTextOverlay={setShowTextOverlay}
+                    textSize={textSize} setTextSize={setTextSize}
+                    textColor={textColor} setTextColor={setTextColor}
+                    textPos={textPos} setTextPos={setTextPos}
+                    textBold={textBold} setTextBold={setTextBold}
+                    TEXT_COLORS={TEXT_COLORS} TEXT_POS_LABEL={TEXT_POS_LABEL} />
                 </div>
               )}
             </div>
@@ -542,28 +594,19 @@ export default function UploadModal({ onClose, onSuccess }) {
                 <div className="space-y-2">
                   <div className="relative">
                     <img src={convertedGif} alt="converted" className="w-full rounded-xl max-h-60 object-contain bg-black/20" />
-                    {textOverlay && showTextOverlay && (
-                      <div className="absolute top-3 inset-x-0 text-center pointer-events-none px-3">
-                        <p className="text-white font-black text-xl leading-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]"
-                          style={{ WebkitTextStroke: '1px black' }}>{textOverlay}</p>
-                      </div>
-                    )}
+                    <OverlayPreview textOverlay={textOverlay} showTextOverlay={showTextOverlay} textSize={textSize} textColor={textColor} textPos={textPos} textBold={textBold} />
                     <button onClick={() => { setConvertedGif(null); setVideoFile(null); setTextOverlay(''); setShowTextOverlay(false) }}
                       className="absolute top-2 right-2 bg-black/60 rounded-full p-1 text-white">
                       <X className="w-4 h-4" />
                     </button>
                   </div>
-                  <div className="flex gap-2 items-center">
-                    <Type className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                    <input className="input flex-1 text-sm py-2" placeholder="GIF üzerine yazı ekle..."
-                      value={textOverlay} onChange={e => setTextOverlay(e.target.value)} />
-                    {textOverlay && (
-                      <button onClick={() => setShowTextOverlay(s => !s)}
-                        className={`text-xs px-2 py-1 rounded-lg border transition-colors ${showTextOverlay ? 'border-brand-500 text-brand-400' : 'border-gray-600 text-gray-500'}`}>
-                        {showTextOverlay ? 'Açık' : 'Kapalı'}
-                      </button>
-                    )}
-                  </div>
+                  <TextOverlayEditor textOverlay={textOverlay} setTextOverlay={setTextOverlay}
+                    showTextOverlay={showTextOverlay} setShowTextOverlay={setShowTextOverlay}
+                    textSize={textSize} setTextSize={setTextSize}
+                    textColor={textColor} setTextColor={setTextColor}
+                    textPos={textPos} setTextPos={setTextPos}
+                    textBold={textBold} setTextBold={setTextBold}
+                    TEXT_COLORS={TEXT_COLORS} TEXT_POS_LABEL={TEXT_POS_LABEL} />
                 </div>
               )}
             </div>
