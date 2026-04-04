@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react'
-import { X, Upload, Search, Video, Loader2, Check, Music, Trash2 } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { X, Upload, Search, Video, Loader2, Check, Music, Trash2, Camera, StopCircle, Image } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
@@ -8,7 +8,7 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
 
 export default function UploadModal({ onClose, onSuccess }) {
   const { user } = useAuth()
-  const [tab, setTab] = useState('upload') // upload | giphy | convert
+  const [tab, setTab] = useState('upload')
   const [caption, setCaption] = useState('')
   const [tags, setTags] = useState('')
   const [musicUrl, setMusicUrl] = useState('')
@@ -18,10 +18,11 @@ export default function UploadModal({ onClose, onSuccess }) {
   const musicFileRef = useRef()
   const [loading, setLoading] = useState(false)
 
-  // Upload tab
+  // Upload tab (GIF + fotoğraf)
   const fileRef = useRef()
   const [selectedFile, setSelectedFile] = useState(null)
   const [preview, setPreview] = useState(null)
+  const [fileType, setFileType] = useState('gif') // 'gif' | 'image'
 
   // GIPHY tab
   const [giphyQuery, setGiphyQuery] = useState('')
@@ -30,20 +31,40 @@ export default function UploadModal({ onClose, onSuccess }) {
   const [giphyLoading, setGiphyLoading] = useState(false)
 
   // Convert tab
-  const videoRef = useRef()
+  const videoRef2 = useRef()
   const [videoFile, setVideoFile] = useState(null)
   const [convertedGif, setConvertedGif] = useState(null)
   const [convertLoading, setConvertLoading] = useState(false)
 
+  // Camera tab
+  const cameraVideoRef = useRef()
+  const streamRef = useRef(null)
+  const recorderRef = useRef(null)
+  const chunksRef = useRef([])
+  const [cameraActive, setCameraActive] = useState(false)
+  const [recording, setRecording] = useState(false)
+  const [cameraVideoFile, setCameraVideoFile] = useState(null)
+  const [cameraConverted, setCameraConverted] = useState(null)
+  const [cameraConvertLoading, setCameraConvertLoading] = useState(false)
+  const [countdown, setCountdown] = useState(0)
+
+  useEffect(() => {
+    return () => stopCamera()
+  }, [])
+
+  useEffect(() => {
+    if (tab !== 'camera') stopCamera()
+  }, [tab])
+
   function handleFileSelect(e) {
     const file = e.target.files[0]
     if (!file) return
-    if (!file.type.startsWith('image/gif') && !file.name.endsWith('.gif')) {
-      toast.error('Sadece GIF dosyaları kabul edilir')
-      return
-    }
+    const isGif = file.type === 'image/gif' || file.name.endsWith('.gif')
+    const isImage = file.type.startsWith('image/')
+    if (!isImage) { toast.error('Sadece GIF veya fotoğraf dosyaları kabul edilir'); return }
     setSelectedFile(file)
     setPreview(URL.createObjectURL(file))
+    setFileType(isGif ? 'gif' : 'image')
   }
 
   async function searchGiphy() {
@@ -53,11 +74,8 @@ export default function UploadModal({ onClose, onSuccess }) {
       const res = await fetch(`${BACKEND_URL}/giphy/search?q=${encodeURIComponent(giphyQuery)}`)
       const data = await res.json()
       setGiphyResults(data.gifs || [])
-    } catch {
-      toast.error('GIPHY arama hatası')
-    } finally {
-      setGiphyLoading(false)
-    }
+    } catch { toast.error('GIPHY arama hatası') }
+    finally { setGiphyLoading(false) }
   }
 
   async function handleVideoConvert() {
@@ -71,12 +89,75 @@ export default function UploadModal({ onClose, onSuccess }) {
       const blob = await res.blob()
       setConvertedGif(URL.createObjectURL(blob))
       toast.success('GIF hazır!')
-    } catch (err) {
-      toast.error(err.message)
-    } finally {
-      setConvertLoading(false)
-    }
+    } catch (err) { toast.error(err.message) }
+    finally { setConvertLoading(false) }
   }
+
+  // ── Kamera ────────────────────────────────────────────────────
+  async function startCamera() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+      streamRef.current = stream
+      cameraVideoRef.current.srcObject = stream
+      await cameraVideoRef.current.play()
+      setCameraActive(true)
+    } catch { toast.error('Kamera erişilemedi') }
+  }
+
+  function stopCamera() {
+    streamRef.current?.getTracks().forEach(t => t.stop())
+    streamRef.current = null
+    if (cameraVideoRef.current) cameraVideoRef.current.srcObject = null
+    setCameraActive(false)
+    setRecording(false)
+  }
+
+  function startRecording() {
+    if (!streamRef.current) return
+    chunksRef.current = []
+    const recorder = new MediaRecorder(streamRef.current, { mimeType: 'video/webm' })
+    recorder.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data) }
+    recorder.onstop = () => {
+      const blob = new Blob(chunksRef.current, { type: 'video/webm' })
+      setCameraVideoFile(new File([blob], 'camera.webm', { type: 'video/webm' }))
+      stopCamera()
+    }
+    recorder.start()
+    recorderRef.current = recorder
+    setRecording(true)
+    // Max 10 sn otomatik dur
+    let sec = 10
+    setCountdown(sec)
+    const interval = setInterval(() => {
+      sec--
+      setCountdown(sec)
+      if (sec <= 0) { clearInterval(interval); stopRecording() }
+    }, 1000)
+  }
+
+  function stopRecording() {
+    if (recorderRef.current?.state === 'recording') {
+      recorderRef.current.stop()
+    }
+    setRecording(false)
+    setCountdown(0)
+  }
+
+  async function convertCameraVideo() {
+    if (!cameraVideoFile) return
+    setCameraConvertLoading(true)
+    try {
+      const form = new FormData()
+      form.append('file', cameraVideoFile)
+      const res = await fetch(`${BACKEND_URL}/convert`, { method: 'POST', body: form })
+      if (!res.ok) throw new Error('Dönüştürme hatası')
+      const blob = await res.blob()
+      setCameraConverted(URL.createObjectURL(blob))
+      toast.success('GIF hazır!')
+    } catch (err) { toast.error(err.message) }
+    finally { setCameraConvertLoading(false) }
+  }
+  // ──────────────────────────────────────────────────────────────
 
   async function addYTMusic() {
     const trimmed = ytInput.trim()
@@ -91,34 +172,26 @@ export default function UploadModal({ onClose, onSuccess }) {
       const res = await fetch(`${BACKEND_URL}/music/extract?url=${encodeURIComponent(trimmed)}`, { method: 'POST' })
       if (!res.ok) throw new Error('extract_failed')
       const data = await res.json()
-      setMusicUrl(data.url)
-      setMusicFileName(data.title || 'YouTube Müziği')
+      setMusicUrl(data.url); setMusicFileName(data.title || 'YouTube Müziği')
       toast.success('Müzik eklendi!')
     } catch {
-      // Extraction başarısız → YouTube URL olarak kaydet (masaüstünde çalar)
-      setMusicUrl(trimmed)
-      setMusicFileName('YouTube Müziği')
+      setMusicUrl(trimmed); setMusicFileName('YouTube Müziği')
       toast('Müzik eklendi (masaüstünde çalar)', { icon: '🎵' })
-    } finally {
-      setMusicUploading(false)
-      setYtInput('')
-    }
+    } finally { setMusicUploading(false); setYtInput('') }
   }
 
   async function handleMusicSelect(e) {
     const file = e.target.files[0]
     if (!file) return
-    if (!file.type.startsWith('audio/')) { toast.error('Ses dosyası seçmelisin (mp3, ogg, wav...)'); return }
+    if (!file.type.startsWith('audio/')) { toast.error('Ses dosyası seçmelisin'); return }
     if (file.size > 15 * 1024 * 1024) { toast.error('Maks 15MB'); return }
     setMusicUploading(true)
     const path = `${user.id}/${Date.now()}_${file.name}`
     const { error } = await supabase.storage.from('music').upload(path, file, { contentType: file.type })
     if (error) { toast.error('Müzik yükleme hatası'); setMusicUploading(false); return }
     const { data: { publicUrl } } = supabase.storage.from('music').getPublicUrl(path)
-    setMusicUrl(publicUrl)
-    setMusicFileName(file.name)
-    setMusicUploading(false)
-    toast.success('Müzik yüklendi!')
+    setMusicUrl(publicUrl); setMusicFileName(file.name)
+    setMusicUploading(false); toast.success('Müzik yüklendi!')
   }
 
   async function publish() {
@@ -129,55 +202,52 @@ export default function UploadModal({ onClose, onSuccess }) {
       let source = 'upload'
 
       if (tab === 'upload') {
-        if (!selectedFile) { toast.error('Bir GIF seç'); setLoading(false); return }
-        const path = `${user.id}/${Date.now()}.gif`
+        if (!selectedFile) { toast.error('Bir dosya seç'); setLoading(false); return }
+        const ext = fileType === 'gif' ? 'gif' : selectedFile.name.split('.').pop() || 'jpg'
+        const path = `${user.id}/${Date.now()}.${ext}`
         const { error: upErr } = await supabase.storage.from('gifs').upload(path, selectedFile)
         if (upErr) throw upErr
         const { data: { publicUrl } } = supabase.storage.from('gifs').getPublicUrl(path)
         gifUrl = publicUrl
+        source = fileType === 'gif' ? 'upload' : 'photo'
       } else if (tab === 'giphy') {
         if (!selectedGiphy) { toast.error('Bir GIF seç'); setLoading(false); return }
-        gifUrl = selectedGiphy
-        source = 'giphy'
+        gifUrl = selectedGiphy; source = 'giphy'
       } else if (tab === 'convert') {
         if (!convertedGif) { toast.error('Önce dönüştür'); setLoading(false); return }
-        // Blob'u Supabase'e yükle
         const blob = await fetch(convertedGif).then(r => r.blob())
         const path = `${user.id}/${Date.now()}.gif`
         const { error: upErr } = await supabase.storage.from('gifs').upload(path, blob, { contentType: 'image/gif' })
         if (upErr) throw upErr
         const { data: { publicUrl } } = supabase.storage.from('gifs').getPublicUrl(path)
-        gifUrl = publicUrl
-        source = 'converted'
+        gifUrl = publicUrl; source = 'converted'
+      } else if (tab === 'camera') {
+        if (!cameraConverted) { toast.error('Önce video çek ve GIF\'e dönüştür'); setLoading(false); return }
+        const blob = await fetch(cameraConverted).then(r => r.blob())
+        const path = `${user.id}/${Date.now()}.gif`
+        const { error: upErr } = await supabase.storage.from('gifs').upload(path, blob, { contentType: 'image/gif' })
+        if (upErr) throw upErr
+        const { data: { publicUrl } } = supabase.storage.from('gifs').getPublicUrl(path)
+        gifUrl = publicUrl; source = 'camera'
       }
 
       const tagArr = tags.split(',').map(t => t.trim().replace(/^#/, '')).filter(Boolean)
-
       const { error } = await supabase.from('posts').insert({
-        user_id: user.id,
-        gif_url: gifUrl,
-        caption: caption.trim() || null,
-        tags: tagArr,
-        source,
-        music_url: musicUrl.trim() || null,
-        likes_count: 0,
-        comments_count: 0
+        user_id: user.id, gif_url: gifUrl, caption: caption.trim() || null,
+        tags: tagArr, source, music_url: musicUrl.trim() || null,
+        likes_count: 0, comments_count: 0
       })
       if (error) throw error
-
-      toast.success('GIF paylaşıldı!')
-      onSuccess?.()
-      onClose()
-    } catch (err) {
-      toast.error(err.message || 'Hata oluştu')
-    } finally {
-      setLoading(false)
-    }
+      toast.success('Paylaşıldı!')
+      onSuccess?.(); onClose()
+    } catch (err) { toast.error(err.message || 'Hata oluştu') }
+    finally { setLoading(false) }
   }
 
   const tabs = [
     { id: 'upload', label: 'Yükle', icon: Upload },
-    { id: 'giphy', label: 'GIPHY Ara', icon: Search },
+    { id: 'camera', label: 'Kamera', icon: Camera },
+    { id: 'giphy', label: 'GIPHY', icon: Search },
     { id: 'convert', label: 'Video→GIF', icon: Video },
   ]
 
@@ -185,22 +255,18 @@ export default function UploadModal({ onClose, onSuccess }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
       <div className="card w-full max-w-xl max-h-[90vh] flex flex-col animate-slide-up" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#2a2a3f]">
-          <h2 className="font-bold text-lg">GIF Paylaş</h2>
+          <h2 className="font-bold text-lg">Paylaş</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-white/5"><X className="w-5 h-5" /></button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-[#2a2a3f]">
+        <div className="flex border-b border-[#2a2a3f] overflow-x-auto">
           {tabs.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              onClick={() => setTab(id)}
-              className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors ${
+            <button key={id} onClick={() => setTab(id)}
+              className={`flex-shrink-0 flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-colors ${
                 tab === id ? 'text-brand-400 border-b-2 border-brand-400' : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              {label}
+              }`}>
+              <Icon className="w-4 h-4" />{label}
             </button>
           ))}
         </div>
@@ -209,23 +275,88 @@ export default function UploadModal({ onClose, onSuccess }) {
           {/* Upload Tab */}
           {tab === 'upload' && (
             <div>
-              <input ref={fileRef} type="file" accept=".gif,image/gif" className="hidden" onChange={handleFileSelect} />
+              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileSelect} />
               {preview ? (
                 <div className="relative">
                   <img src={preview} alt="preview" className="w-full rounded-xl max-h-60 object-contain bg-black/20" />
+                  {fileType === 'image' && (
+                    <div className="absolute top-2 left-2 bg-black/60 rounded-lg px-2 py-1 flex items-center gap-1 text-xs text-white">
+                      <Image className="w-3 h-3" /> Fotoğraf
+                    </div>
+                  )}
                   <button onClick={() => { setPreview(null); setSelectedFile(null) }}
                     className="absolute top-2 right-2 bg-black/60 rounded-full p-1 text-white hover:bg-black">
                     <X className="w-4 h-4" />
                   </button>
                 </div>
               ) : (
-                <div
-                  onClick={() => fileRef.current?.click()}
-                  className="border-2 border-dashed border-[#3a3a5c] rounded-xl p-12 text-center cursor-pointer hover:border-brand-500 transition-colors group"
-                >
-                  <Upload className="w-10 h-10 text-gray-500 mx-auto mb-3 group-hover:text-brand-400 transition-colors" />
-                  <p className="text-gray-400 text-sm">GIF dosyasını seç veya sürükle</p>
-                  <p className="text-gray-600 text-xs mt-1">Maks 10MB</p>
+                <div onClick={() => fileRef.current?.click()}
+                  className="border-2 border-dashed border-[#3a3a5c] rounded-xl p-12 text-center cursor-pointer hover:border-brand-500 transition-colors group">
+                  <div className="flex items-center justify-center gap-3 mb-3">
+                    <Upload className="w-8 h-8 text-gray-500 group-hover:text-brand-400 transition-colors" />
+                    <Image className="w-8 h-8 text-gray-500 group-hover:text-brand-400 transition-colors" />
+                  </div>
+                  <p className="text-gray-400 text-sm">GIF veya fotoğraf seç</p>
+                  <p className="text-gray-600 text-xs mt-1">JPG, PNG, GIF · Maks 10MB</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Camera Tab */}
+          {tab === 'camera' && (
+            <div className="space-y-3">
+              <div className="relative bg-black rounded-xl overflow-hidden aspect-video">
+                <video ref={cameraVideoRef} className="w-full h-full object-cover" muted playsInline />
+                {!cameraActive && !cameraVideoFile && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <button onClick={startCamera}
+                      className="flex flex-col items-center gap-2 text-gray-400 hover:text-white transition-colors">
+                      <Camera className="w-12 h-12" />
+                      <span className="text-sm">Kamerayı Aç</span>
+                    </button>
+                  </div>
+                )}
+                {recording && countdown > 0 && (
+                  <div className="absolute top-3 right-3 bg-red-500 text-white text-sm font-bold rounded-full w-8 h-8 flex items-center justify-center">
+                    {countdown}
+                  </div>
+                )}
+                {recording && (
+                  <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-black/60 rounded-full px-2 py-1">
+                    <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                    <span className="text-white text-xs">Kayıt</span>
+                  </div>
+                )}
+              </div>
+
+              {cameraActive && !recording && (
+                <button onClick={startRecording}
+                  className="w-full btn-primary py-3 flex items-center justify-center gap-2">
+                  <div className="w-3 h-3 bg-red-400 rounded-full" /> Kayda Başla (maks 10 sn)
+                </button>
+              )}
+              {recording && (
+                <button onClick={stopRecording}
+                  className="w-full bg-red-500 hover:bg-red-600 text-white py-3 rounded-xl flex items-center justify-center gap-2 transition-colors">
+                  <StopCircle className="w-4 h-4" /> Kaydı Durdur
+                </button>
+              )}
+              {cameraVideoFile && !cameraConverted && (
+                <button onClick={convertCameraVideo} disabled={cameraConvertLoading}
+                  className="w-full btn-primary py-3 flex items-center justify-center gap-2">
+                  {cameraConvertLoading
+                    ? <><Loader2 className="w-4 h-4 animate-spin" /> GIF'e Dönüştürülüyor...</>
+                    : <><Video className="w-4 h-4" /> GIF'e Dönüştür</>}
+                </button>
+              )}
+              {cameraConverted && (
+                <div className="relative">
+                  <img src={cameraConverted} alt="camera gif" className="w-full rounded-xl max-h-60 object-contain bg-black/20" />
+                  <button onClick={() => { setCameraConverted(null); setCameraVideoFile(null) }}
+                    className="absolute top-2 right-2 bg-black/60 rounded-full p-1 text-white">
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
               )}
             </div>
@@ -235,26 +366,19 @@ export default function UploadModal({ onClose, onSuccess }) {
           {tab === 'giphy' && (
             <div>
               <div className="flex gap-2 mb-4">
-                <input
-                  className="input flex-1"
-                  placeholder="GIF ara..."
-                  value={giphyQuery}
-                  onChange={e => setGiphyQuery(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && searchGiphy()}
-                />
+                <input className="input flex-1" placeholder="GIF ara..."
+                  value={giphyQuery} onChange={e => setGiphyQuery(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && searchGiphy()} />
                 <button onClick={searchGiphy} className="btn-primary px-4" disabled={giphyLoading}>
                   {giphyLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                 </button>
               </div>
               <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
                 {giphyResults.map(gif => (
-                  <div
-                    key={gif.id}
-                    onClick={() => setSelectedGiphy(gif.url)}
+                  <div key={gif.id} onClick={() => setSelectedGiphy(gif.url)}
                     className={`relative cursor-pointer rounded-lg overflow-hidden border-2 transition-all ${
                       selectedGiphy === gif.url ? 'border-brand-500' : 'border-transparent hover:border-brand-500/50'
-                    }`}
-                  >
+                    }`}>
                     <img src={gif.preview} alt="" className="w-full h-28 object-cover" />
                     {selectedGiphy === gif.url && (
                       <div className="absolute inset-0 bg-brand-500/20 flex items-center justify-center">
@@ -265,7 +389,7 @@ export default function UploadModal({ onClose, onSuccess }) {
                 ))}
               </div>
               {giphyResults.length === 0 && !giphyLoading && (
-                <p className="text-center text-gray-500 text-sm py-6">Arama yap veya trending GIF'leri gör</p>
+                <p className="text-center text-gray-500 text-sm py-6">GIF ara</p>
               )}
             </div>
           )}
@@ -273,22 +397,20 @@ export default function UploadModal({ onClose, onSuccess }) {
           {/* Convert Tab */}
           {tab === 'convert' && (
             <div>
-              <input ref={videoRef} type="file" accept="video/*" className="hidden" onChange={e => setVideoFile(e.target.files[0])} />
+              <input ref={videoRef2} type="file" accept="video/*" className="hidden" onChange={e => setVideoFile(e.target.files[0])} />
               {!convertedGif ? (
                 <div className="space-y-3">
-                  <div
-                    onClick={() => videoRef.current?.click()}
-                    className="border-2 border-dashed border-[#3a3a5c] rounded-xl p-10 text-center cursor-pointer hover:border-brand-500 transition-colors group"
-                  >
+                  <div onClick={() => videoRef2.current?.click()}
+                    className="border-2 border-dashed border-[#3a3a5c] rounded-xl p-10 text-center cursor-pointer hover:border-brand-500 transition-colors group">
                     <Video className="w-10 h-10 text-gray-500 mx-auto mb-3 group-hover:text-brand-400 transition-colors" />
                     <p className="text-gray-400 text-sm">{videoFile ? videoFile.name : 'Video seç (mp4, webm, mov)'}</p>
                     <p className="text-gray-600 text-xs mt-1">Maks 50MB</p>
                   </div>
                   {videoFile && (
                     <button onClick={handleVideoConvert} disabled={convertLoading} className="btn-primary w-full">
-                      {convertLoading ? (
-                        <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />Dönüştürülüyor...</span>
-                      ) : 'GIF\'e Dönüştür'}
+                      {convertLoading
+                        ? <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />Dönüştürülüyor...</span>
+                        : "GIF'e Dönüştür"}
                     </button>
                   )}
                 </div>
@@ -320,15 +442,10 @@ export default function UploadModal({ onClose, onSuccess }) {
             ) : (
               <div className="space-y-2">
                 <div className="flex gap-2">
-                  <input
-                    className="input flex-1 text-sm"
-                    placeholder="YouTube linki yapıştır..."
-                    value={ytInput}
-                    onChange={e => setYtInput(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && addYTMusic()}
-                  />
-                  <button type="button" onClick={addYTMusic}
-                    disabled={!ytInput.trim() || musicUploading}
+                  <input className="input flex-1 text-sm" placeholder="YouTube linki yapıştır..."
+                    value={ytInput} onChange={e => setYtInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && addYTMusic()} />
+                  <button type="button" onClick={addYTMusic} disabled={!ytInput.trim() || musicUploading}
                     className="btn-primary px-3 py-2 text-sm flex-shrink-0 flex items-center gap-1.5">
                     {musicUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Music className="w-4 h-4" />}
                     {musicUploading ? 'İndiriliyor...' : 'Ekle'}
@@ -341,8 +458,7 @@ export default function UploadModal({ onClose, onSuccess }) {
                 </div>
                 <button type="button" onClick={() => musicFileRef.current?.click()} disabled={musicUploading}
                   className="w-full flex items-center gap-2 px-3 py-2 bg-[#1a1a2e] border border-dashed border-[#3a3a5c] rounded-xl text-sm text-gray-500 hover:border-brand-500 hover:text-brand-400 transition-colors">
-                  <Music className="w-4 h-4" />
-                  MP3 / OGG / WAV dosyası yükle
+                  <Music className="w-4 h-4" /> MP3 / OGG / WAV dosyası yükle
                 </button>
               </div>
             )}
@@ -351,9 +467,9 @@ export default function UploadModal({ onClose, onSuccess }) {
 
         <div className="px-5 pb-5 pt-3 border-t border-[#2a2a3f]">
           <button onClick={publish} disabled={loading} className="btn-primary w-full py-3">
-            {loading ? (
-              <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />Paylaşılıyor...</span>
-            ) : 'Paylaş'}
+            {loading
+              ? <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />Paylaşılıyor...</span>
+              : 'Paylaş'}
           </button>
         </div>
       </div>

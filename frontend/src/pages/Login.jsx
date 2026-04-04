@@ -50,7 +50,10 @@ export default function Login() {
           </form>
         </div>
 
-        <p className="text-center text-gray-500 text-sm mt-4">
+        <p className="text-center text-gray-500 text-sm mt-3">
+          <Link to="/forgot-password" className="text-gray-400 hover:text-white transition-colors">Şifremi unuttum</Link>
+        </p>
+        <p className="text-center text-gray-500 text-sm mt-2">
           Hesabın yok mu?{' '}
           <Link to="/register" className="text-brand-400 hover:text-brand-300 font-medium">Kayıt Ol</Link>
         </p>

@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react'
-import { X, Send, Heart, CornerDownRight, BadgeCheck, Trash2, Pencil, Check } from 'lucide-react'
+import { useEffect, useState, useRef } from 'react'
+import { X, Send, Heart, CornerDownRight, BadgeCheck, Trash2, Pencil, Check, Film, Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useBlock } from '../context/BlockContext'
 import { usePresence } from '../context/PresenceContext'
 import toast from 'react-hot-toast'
+
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
 
 export default function CommentModal({ post, onClose }) {
   const { user } = useAuth()
@@ -20,6 +22,10 @@ export default function CommentModal({ post, onClose }) {
   const [myLikes, setMyLikes] = useState(new Set())
   const [editingId, setEditingId] = useState(null)
   const [editText, setEditText] = useState('')
+  const [showGifPicker, setShowGifPicker] = useState(false)
+  const [gifQuery, setGifQuery] = useState('')
+  const [gifResults, setGifResults] = useState([])
+  const [gifLoading, setGifLoading] = useState(false)
 
   useEffect(() => {
     loadComments()
@@ -44,6 +50,29 @@ export default function CommentModal({ post, onClose }) {
       setMyLikes(new Set((lk || []).map(l => l.comment_id)))
     }
     return all.length
+  }
+
+  async function searchGif() {
+    if (!gifQuery.trim()) return
+    setGifLoading(true)
+    try {
+      const res = await fetch(`${BACKEND_URL}/giphy/search?q=${encodeURIComponent(gifQuery)}`)
+      const data = await res.json()
+      setGifResults(data.gifs || [])
+    } catch { toast.error('GIF arama hatası') }
+    finally { setGifLoading(false) }
+  }
+
+  async function sendGifComment(gifUrl) {
+    if (!user) return
+    setShowGifPicker(false)
+    setGifResults([]); setGifQuery('')
+    setLoading(true)
+    const { error } = await supabase.from('comments').insert({
+      user_id: user.id, post_id: post.id, text: gifUrl
+    })
+    if (!error) { await loadComments() }
+    setLoading(false)
   }
 
   async function submit(e) {
@@ -149,13 +178,17 @@ export default function CommentModal({ post, onClose }) {
               </button>
             </div>
           ) : (
-            <p className="text-sm">
-              <span className="inline-flex items-center gap-0.5 font-semibold text-brand-400">
+            <div>
+              <span className="inline-flex items-center gap-0.5 font-semibold text-brand-400 text-sm">
                 {c.profiles?.display_name || c.profiles?.username}
                 {c.profiles?.is_verified && <BadgeCheck className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
               </span>
-              {' '}<span className="text-gray-300">{c.text}</span>
-            </p>
+              {c.text?.startsWith('http') && (c.text.includes('.gif') || c.text.includes('giphy')) ? (
+                <img src={c.text} alt="gif" className="mt-1.5 rounded-lg max-h-32 max-w-[200px] object-contain" />
+              ) : (
+                <p className="text-sm text-gray-300">{c.text}</p>
+              )}
+            </div>
           )}
           <div className="flex items-center gap-3 mt-0.5">
             <p className="text-xs text-gray-600">{new Date(c.created_at).toLocaleString('tr-TR')}</p>
@@ -233,13 +266,40 @@ export default function CommentModal({ post, onClose }) {
         </div>
 
         {user && (
-          <form onSubmit={submit} className="px-4 py-3 border-t border-[#2a2a3f] flex gap-2">
-            <input className="input flex-1 text-sm py-2" placeholder="Yorum yaz..."
-              value={text} onChange={e => setText(e.target.value)} disabled={loading} />
-            <button type="submit" disabled={loading || !text.trim()} className="btn-primary px-3 py-2">
-              <Send className="w-4 h-4" />
-            </button>
-          </form>
+          <div className="border-t border-[#2a2a3f]">
+            {/* GIF picker */}
+            {showGifPicker && (
+              <div className="px-4 pt-3 pb-2 space-y-2">
+                <div className="flex gap-2">
+                  <input className="input flex-1 text-sm py-1.5" placeholder="GIF ara..."
+                    value={gifQuery} onChange={e => setGifQuery(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && searchGif()} autoFocus />
+                  <button onClick={searchGif} disabled={gifLoading} className="btn-primary px-3 py-1.5">
+                    {gifLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Ara'}
+                  </button>
+                </div>
+                {gifResults.length > 0 && (
+                  <div className="grid grid-cols-3 gap-1.5 max-h-40 overflow-y-auto">
+                    {gifResults.map(gif => (
+                      <img key={gif.id} src={gif.preview} alt="" onClick={() => sendGifComment(gif.url)}
+                        className="w-full h-20 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity" />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            <form onSubmit={submit} className="px-4 py-3 flex gap-2">
+              <button type="button" onClick={() => setShowGifPicker(s => !s)}
+                className={`p-2 rounded-xl transition-colors flex-shrink-0 ${showGifPicker ? 'text-brand-400 bg-brand-500/10' : 'text-gray-500 hover:text-brand-400 hover:bg-brand-500/10'}`}>
+                <Film className="w-5 h-5" />
+              </button>
+              <input className="input flex-1 text-sm py-2" placeholder="Yorum yaz..."
+                value={text} onChange={e => setText(e.target.value)} disabled={loading} />
+              <button type="submit" disabled={loading || !text.trim()} className="btn-primary px-3 py-2">
+                <Send className="w-4 h-4" />
+              </button>
+            </form>
+          </div>
         )}
       </div>
     </div>

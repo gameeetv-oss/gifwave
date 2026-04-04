@@ -9,6 +9,8 @@ import Profile from './pages/Profile'
 import Upload from './pages/Upload'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import ForgotPassword from './pages/ForgotPassword'
+import ResetPassword from './pages/ResetPassword'
 import Notifications from './pages/Notifications'
 import Messages from './pages/Messages'
 import Inbox from './pages/Inbox'
@@ -37,6 +39,8 @@ function AppRoutes() {
         <Route path="/profile/:username" element={<Profile />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </>
