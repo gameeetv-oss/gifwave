@@ -10,7 +10,7 @@ const INTERSTITIAL_ID = 'ca-app-pub-3940256099942544/1033173712' // Test ID
 
 async function showInterstitialAd() {
   try {
-    const { AdMob } = await import('@capacitor-community/admob')
+    const { AdMob } = await import(/* @vite-ignore */ '@capacitor-community/admob')
     await AdMob.prepareInterstitial({ adId: INTERSTITIAL_ID, isTesting: true })
     await AdMob.showInterstitial()
   } catch {}
