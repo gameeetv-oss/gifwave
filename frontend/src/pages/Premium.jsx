@@ -21,7 +21,7 @@ const BENEFITS = [
 
 export default function Premium({ onClose }) {
   const { user, profile, fetchProfile } = useAuth()
-  const [tab, setTab] = useState('shopier')
+  const [tab, setTab] = useState('whop')
   const [code, setCode] = useState('')
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
@@ -113,7 +113,6 @@ export default function Premium({ onClose }) {
             {/* Ödeme seçenekleri tab */}
             <div className="flex rounded-xl overflow-hidden border border-[#3a3a5c]">
               {[
-                { id: 'shopier', label: 'Shopier' },
                 { id: 'whop', label: 'Whop' },
                 { id: 'kod', label: 'Aktivasyon Kodu' },
               ].map(({ id, label }) => (
@@ -123,25 +122,6 @@ export default function Premium({ onClose }) {
                 </button>
               ))}
             </div>
-
-            {tab === 'shopier' && (
-              <div className="space-y-3">
-                <p className="text-sm text-gray-400 text-center">Shopier ile güvenli ödeme yap, sonra e-posta adresinle aktif et.</p>
-                <a href={SHOPIER_LINK} target="_blank" rel="noopener noreferrer"
-                  className="btn-primary w-full py-3 flex items-center justify-center gap-2 text-sm font-bold">
-                  <Crown className="w-4 h-4" /> Shopier'da Satın Al — ₺{PRICE_TRY}/ay
-                </a>
-                <div className="border-t border-[#2a2a3f] pt-3">
-                  <p className="text-xs text-gray-500 mb-2">Ödeme sonrası kullandığın e-postayı gir:</p>
-                  <div className="flex gap-2">
-                    <input className="input flex-1 text-sm py-2" placeholder="ödeme e-postası..." value={email} onChange={e => setEmail(e.target.value)} />
-                    <button onClick={activateWithEmail} disabled={loading || !email.trim()} className="btn-primary px-3 py-2 text-sm flex-shrink-0">
-                      {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Aktif Et'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {tab === 'whop' && (
               <div className="space-y-3">
