@@ -7,7 +7,7 @@ import toast from 'react-hot-toast'
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
 
 // Ödeme linkleri — Whop/Shopier ürün ID'nizi buraya girin
-const WHOP_LINK = 'https://whop.com/gifwave-premium'
+const WHOP_LINK = 'https://whop.com/gifwave/gifwave-premium'
 const SHOPIER_LINK = 'https://www.shopier.com/gifwave-premium'
 const PRICE_TRY = '49'
 
