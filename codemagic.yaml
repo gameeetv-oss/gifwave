@@ -6,14 +6,19 @@ workflows:
       xcode: latest
       node: 18
       vars:
-        BUNDLE_ID: com.gifwave.app
-        XCODE_WORKSPACE: ios/App/App.xcworkspace
-        XCODE_SCHEME: App
+        VITE_SUPABASE_URL: https://nwdwfwokdpjdkpsztuuo.supabase.co
+        VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53ZHdmd29rZHBqZGtwc3p0dXVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NTMzODMsImV4cCI6MjA4ODIyOTM4M30.H9_9Noz8A2kOeP1J2yHP9Vr_06S9T2q0UWdTL3Z1wUo
+        VITE_BACKEND_URL: https://gifwave-backend.onrender.com
     scripts:
       - name: Install dependencies
         script: |
           cd frontend
           npm install
+
+      - name: Install Capacitor iOS
+        script: |
+          cd frontend
+          npm install @capacitor/core @capacitor/cli @capacitor/ios
 
       - name: Build web app
         script: |
@@ -23,7 +28,6 @@ workflows:
       - name: Add iOS platform
         script: |
           cd frontend
-          npm install @capacitor/ios
           npx cap add ios || true
 
       - name: Sync Capacitor
@@ -47,9 +51,8 @@ workflows:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
-            CONFIGURATION_BUILD_DIR=build \
+            CONFIGURATION_BUILD_DIR=$CM_BUILD_DIR/build \
             clean build
 
     artifacts:
-      - frontend/build/*.app
-      - frontend/build/**/*.ipa
+      - $CM_BUILD_DIR/build/*.app
