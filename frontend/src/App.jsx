@@ -16,6 +16,8 @@ import Messages from './pages/Messages'
 import Inbox from './pages/Inbox'
 import PostDetail from './pages/PostDetail'
 import Premium from './pages/Premium'
+import PrivacyPolicy from './pages/PrivacyPolicy'
+import Terms from './pages/Terms'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -43,6 +45,8 @@ function AppRoutes() {
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/premium" element={<PrivateRoute><div className="pb-16"><Premium /></div></PrivateRoute>} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/terms" element={<Terms />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </>

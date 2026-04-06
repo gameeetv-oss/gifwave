@@ -4,7 +4,8 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import {
   Camera, Loader2, UserPlus, UserMinus, Heart, Repeat2, Grid3x3,
-  Pencil, Trash2, Check, X, BadgeCheck, MessageSquare, Clock, ShieldOff, Shield, MoreHorizontal
+  Pencil, Trash2, Check, X, BadgeCheck, MessageSquare, Clock, ShieldOff, Shield, MoreHorizontal,
+  Flag, HelpCircle
 } from 'lucide-react'
 import GIFCard from '../components/GIFCard'
 import FollowModal from '../components/FollowModal'
@@ -346,10 +347,16 @@ export default function Profile() {
 
               {!editMode && (
                 isMe ? (
-                  <button onClick={() => setEditMode(true)}
-                    className="btn-ghost text-sm flex-shrink-0 flex items-center gap-1.5">
-                    <Pencil className="w-3.5 h-3.5" /><span className="hidden sm:inline">Düzenle</span>
-                  </button>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <button onClick={() => setEditMode(true)}
+                      className="btn-ghost text-sm flex items-center gap-1.5">
+                      <Pencil className="w-3.5 h-3.5" /><span className="hidden sm:inline">Düzenle</span>
+                    </button>
+                    <button onClick={() => window.open('mailto:support@gifwave.app?subject=Support Request')}
+                      className="btn-ghost text-sm flex items-center gap-1.5 text-gray-500 hover:text-gray-300">
+                      <HelpCircle className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 ) : user && (
                   <div className="flex gap-1.5 items-center flex-shrink-0">
                     <button onClick={toggleFollow}
@@ -369,8 +376,17 @@ export default function Profile() {
                         <MoreHorizontal className="w-4 h-4" />
                       </button>
                       {showMenu && (
-                        <div className="absolute right-0 top-9 bg-[#1a1a2e] border border-[#3a3a5c] rounded-xl shadow-xl z-20 min-w-[160px] py-1"
+                        <div className="absolute right-0 top-9 bg-[#1a1a2e] border border-[#3a3a5c] rounded-xl shadow-xl z-20 min-w-[180px] py-1"
                           onClick={e => e.stopPropagation()}>
+                          <button onClick={() => {
+                            setShowMenu(false)
+                            const subject = encodeURIComponent(`Report: @${profile.username}`)
+                            const body = encodeURIComponent(`I want to report the user @${profile.username} for the following reason:\n\n`)
+                            window.open(`mailto:support@gifwave.app?subject=${subject}&body=${body}`)
+                          }}
+                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-orange-400 hover:bg-orange-500/10 transition-colors">
+                            <Flag className="w-4 h-4" /> Şikayet Et
+                          </button>
                           <button onClick={toggleBlock}
                             className={`w-full flex items-center gap-2 px-4 py-2 text-sm transition-colors ${
                               isBlocked ? 'text-gray-300 hover:bg-white/5' : 'text-red-400 hover:bg-red-500/10'
