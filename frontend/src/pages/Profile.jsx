@@ -109,8 +109,25 @@ export default function Profile() {
 
     const { data: settData } = await supabase.from('user_settings').select('*').eq('user_id', prof.id).maybeSingle()
     const defaultSett = { is_private: false, who_can_comment: 'all', who_can_reply: 'all', show_liked_posts: true, allow_dm: true, show_read_receipts: true }
-    setSettings(settData || defaultSett)
-    if (isMe) setEditSettings(settData || defaultSett)
+    const finalSett = settData || defaultSett
+    setSettings(finalSett)
+    if (isMe) setEditSettings(finalSett)
+
+    // Gizli profil: takipçi değilse gönderileri gizle
+    const viewerIsMe = user?.id === prof.id
+    if (!viewerIsMe && finalSett.is_private) {
+      let isFollower = false
+      if (user) {
+        const { data: fData } = await supabase.from('follows')
+          .select('status').eq('follower_id', user.id).eq('following_id', prof.id).maybeSingle()
+        isFollower = fData?.status === 'accepted'
+      }
+      if (!isFollower) {
+        setPosts([])
+        setReposts([])
+        setLiked([])
+      }
+    }
 
     setLoading(false)
   }
@@ -348,7 +365,7 @@ export default function Profile() {
               {!editMode && (
                 isMe ? (
                   <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <button onClick={() => setEditMode(true)}
+                    <button onClick={() => { setEditSettings(settings); setEditMode(true) }}
                       className="btn-ghost text-sm flex items-center gap-1.5">
                       <Pencil className="w-3.5 h-3.5" /><span className="hidden sm:inline">Düzenle</span>
                     </button>
@@ -435,12 +452,18 @@ export default function Profile() {
         ))}
       </div>
 
-      {currentItems.length === 0 ? (
+      {!isMe && settings?.is_private && followStatus !== 'accepted' ? (
+        <div className="text-center py-16 text-gray-500">
+          <Shield className="w-12 h-12 mx-auto mb-3 text-gray-600" />
+          <p className="text-base font-semibold text-gray-300 mb-1">Bu hesap gizlidir</p>
+          <p className="text-sm text-gray-600">Gönderileri görmek için takip isteği gönder.</p>
+        </div>
+      ) : currentItems.length === 0 ? (
         <div className="text-center py-12 text-gray-500">
           <p className="text-3xl mb-2">{tab === 'posts' ? '🎬' : tab === 'reposts' ? '🔁' : '❤️'}</p>
           <p className="text-sm">{tab === 'posts' ? 'Henüz gönderi yok' : tab === 'reposts' ? 'Henüz repost yok' : 'Henüz beğeni yok'}</p>
         </div>
-      ) : (
+      ) : currentItems.length > 0 ? (
         <div className="space-y-4">
           {currentItems.map(post => (
             <div key={post.id + (post._repost ? '_r' : post._liked ? '_l' : '')} className="relative h-[500px] rounded-2xl overflow-hidden">
@@ -449,7 +472,7 @@ export default function Profile() {
             </div>
           ))}
         </div>
-      )}
+      ) : null}
 
       {followModal && (
         <FollowModal profileId={profile.id} type={followModal}
