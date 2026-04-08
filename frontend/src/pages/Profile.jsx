@@ -233,6 +233,23 @@ export default function Profile() {
     fetchProfile(user.id)
   }
 
+  async function deleteAccount() {
+    if (!window.confirm('Hesabını kalıcı olarak silmek istediğinden emin misin? Bu işlem geri alınamaz.')) return
+    if (!window.confirm('Son onay: Tüm GIF\'lerin, yorumların ve verilerinin silineceğini onaylıyor musun?')) return
+    try {
+      await supabase.from('posts').delete().eq('user_id', user.id)
+      await supabase.from('likes').delete().eq('user_id', user.id)
+      await supabase.from('reposts').delete().eq('user_id', user.id)
+      await supabase.from('follows').delete().eq('follower_id', user.id)
+      await supabase.from('follows').delete().eq('following_id', user.id)
+      await supabase.from('profiles').delete().eq('id', user.id)
+      await supabase.auth.signOut()
+      window.location.href = '/login'
+    } catch {
+      toast.error('Hesap silinirken hata oluştu. Destek için support@gifwave.app adresine yazın.')
+    }
+  }
+
   async function deletePost(postId) {
     if (!window.confirm('Bu gönderiyi silmek istiyor musun?')) return
     const { error } = await supabase.from('posts').delete().eq('id', postId).eq('user_id', user.id)
@@ -362,6 +379,10 @@ export default function Profile() {
                       </button>
                       <button onClick={() => setEditMode(false)} className="btn-ghost text-sm px-3 py-1.5 flex items-center gap-1">
                         <X className="w-3 h-3" /> İptal
+                      </button>
+                      <button onClick={deleteAccount}
+                        className="text-sm px-3 py-1.5 flex items-center gap-1 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl transition-colors">
+                        Hesabı Sil
                       </button>
                     </div>
                   </div>
