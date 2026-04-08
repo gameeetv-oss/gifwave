@@ -86,14 +86,10 @@ jobs:
           }
           EOF
 
-      - name: Decode keystore
-        run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > /tmp/gifwave-release.keystore
-
       - name: Build Release AAB
         working-directory: frontend/android
         env:
-          STORE_FILE: /tmp/gifwave-release.keystore
+          STORE_FILE: ${{ github.workspace }}/gifwave-release.keystore
           STORE_PASS: ${{ secrets.STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASS: ${{ secrets.KEY_PASSWORD }}
