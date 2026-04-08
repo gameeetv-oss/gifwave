@@ -189,9 +189,17 @@ export default function Profile() {
       const { data: existing } = await supabase.from('profiles').select('id').eq('username', newUsername).maybeSingle()
       if (existing) { toast.error('Bu kullanıcı adı alınmış'); setSaving(false); return }
     }
-    const { error } = await supabase.from('profiles')
-      .update({ bio: editData.bio.trim(), display_name: editData.display_name.trim(), username: newUsername, show_online_status: editData.show_online_status })
-      .eq('id', user.id)
+    // Profil + ayarları aynı anda kaydet
+    const [profileRes, settingsRes] = await Promise.all([
+      supabase.from('profiles')
+        .update({ bio: editData.bio.trim(), display_name: editData.display_name.trim(), username: newUsername, show_online_status: editData.show_online_status })
+        .eq('id', user.id),
+      editSettings
+        ? supabase.from('user_settings').upsert({ user_id: user.id, ...editSettings })
+        : Promise.resolve({ error: null }),
+    ])
+    const error = profileRes.error || settingsRes.error
+    if (editSettings && !settingsRes.error) setSettings(editSettings)
     if (!error) {
       toast.success('Profil güncellendi')
       setEditMode(false)
@@ -331,9 +339,6 @@ export default function Profile() {
                             onChange={e => setEditSettings(s => ({ ...s, [key]: e.target.checked }))} />
                         </label>
                       ))}
-                      {editSettings && (
-                        <button onClick={saveSettings} className="btn-ghost text-xs px-2 py-1 mt-1">Ayarları Kaydet</button>
-                      )}
                     </div>
 
                     <div className="flex gap-2">
