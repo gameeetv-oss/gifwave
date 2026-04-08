@@ -103,53 +103,21 @@ jobs:
       - name: Patch app build.gradle for signing
         working-directory: frontend/android
         run: |
-          cat > app/build.gradle << 'GRADLE'
-          apply plugin: 'com.android.application'
-
-          def keystorePropertiesFile = rootProject.file("keystore.properties")
-          def keystoreProperties = new Properties()
-          if (keystorePropertiesFile.exists()) {
-              keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
-          }
-
-          android {
-              namespace "com.gifwave.app"
-              compileSdk rootProject.ext.compileSdkVersion
-              defaultConfig {
-                  applicationId "com.gifwave.app"
-                  minSdkVersion rootProject.ext.minSdkVersion
-                  targetSdkVersion rootProject.ext.targetSdkVersion
-                  versionCode 1
-                  versionName "1.0"
-              }
-              signingConfigs {
-                  release {
-                      storeFile file(keystoreProperties['storeFile'])
-                      storePassword keystoreProperties['storePassword']
-                      keyAlias keystoreProperties['keyAlias']
-                      keyPassword keystoreProperties['keyPassword']
-                  }
-              }
-              buildTypes {
-                  release {
-                      minifyEnabled false
-                      signingConfig signingConfigs.release
-                  }
-              }
-          }
-
-          repositories {
-              flatDir {
-                  dirs '../capacitor-cordova-android-plugins/src/main'
-              }
-          }
-
-          dependencies {
-              implementation fileTree(include: ['*.jar'], dir: 'libs')
-              implementation project(':capacitor-android')
-              implementation project(':capacitor-cordova-android-plugins')
-          }
-          GRADLE
+          # Signing config'i mevcut build.gradle'a ekle
+          sed -i '/android {/a\
+              def keystorePropertiesFile = rootProject.file("keystore.properties")\
+              def keystoreProperties = new Properties()\
+              keystoreProperties.load(new FileInputStream(keystorePropertiesFile))\
+              signingConfigs {\
+                  release {\
+                      storeFile file(keystoreProperties["storeFile"])\
+                      storePassword keystoreProperties["storePassword"]\
+                      keyAlias keystoreProperties["keyAlias"]\
+                      keyPassword keystoreProperties["keyPassword"]\
+                  }\
+              }' app/build.gradle
+          # release buildType'a signingConfig ekle
+          sed -i '/buildTypes {/{n;/release {/a\                  signingConfig signingConfigs.release}' app/build.gradle || true
 
       - name: Build Release AAB
         working-directory: frontend/android
