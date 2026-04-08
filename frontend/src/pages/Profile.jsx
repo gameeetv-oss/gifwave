@@ -339,6 +339,20 @@ export default function Profile() {
                             onChange={e => setEditSettings(s => ({ ...s, [key]: e.target.checked }))} />
                         </label>
                       ))}
+                      {editSettings && [
+                        { key: 'who_can_comment', label: 'Yorum yapabilir' },
+                        { key: 'who_can_reply',   label: 'Yanıtlayabilir' },
+                      ].map(({ key, label }) => (
+                        <label key={key} className="flex items-center justify-between text-sm text-gray-300 select-none">
+                          <span className="text-xs">{label}</span>
+                          <select value={editSettings[key] || 'all'} className="ml-2 bg-[#1a1a2e] border border-[#3a3a5c] rounded-lg text-xs text-gray-300 px-2 py-1"
+                            onChange={e => setEditSettings(s => ({ ...s, [key]: e.target.value }))}>
+                            <option value="all">Herkes</option>
+                            <option value="followers">Takipçiler</option>
+                            <option value="none">Kapalı</option>
+                          </select>
+                        </label>
+                      ))}
                     </div>
 
                     <div className="flex gap-2">

@@ -26,12 +26,42 @@ export default function CommentModal({ post, onClose }) {
   const [gifQuery, setGifQuery] = useState('')
   const [gifResults, setGifResults] = useState([])
   const [gifLoading, setGifLoading] = useState(false)
+  const [ownerSettings, setOwnerSettings] = useState(null)
+  const [isFollowingOwner, setIsFollowingOwner] = useState(false)
 
   useEffect(() => {
     loadComments()
+    loadOwnerSettings()
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = '' }
   }, [])
+
+  async function loadOwnerSettings() {
+    const { data: sett } = await supabase.from('user_settings').select('who_can_comment,who_can_reply').eq('user_id', post.user_id).maybeSingle()
+    setOwnerSettings(sett || { who_can_comment: 'all', who_can_reply: 'all' })
+    if (user && user.id !== post.user_id && sett?.who_can_comment === 'followers') {
+      const { data: f } = await supabase.from('follows').select('status').eq('follower_id', user.id).eq('following_id', post.user_id).maybeSingle()
+      setIsFollowingOwner(f?.status === 'accepted')
+    }
+  }
+
+  const isPostOwner = user?.id === post.user_id
+  function canComment() {
+    if (isPostOwner) return true
+    if (!user) return false
+    const wcc = ownerSettings?.who_can_comment || 'all'
+    if (wcc === 'none') return false
+    if (wcc === 'followers') return isFollowingOwner
+    return true
+  }
+  function canReply() {
+    if (isPostOwner) return true
+    if (!user) return false
+    const wcr = ownerSettings?.who_can_reply || 'all'
+    if (wcr === 'none') return false
+    if (wcr === 'followers') return isFollowingOwner
+    return true
+  }
 
   async function loadComments() {
     const { data } = await supabase
@@ -198,7 +228,7 @@ export default function CommentModal({ post, onClose }) {
               <Heart className={`w-3 h-3 ${myLikes.has(c.id) ? 'fill-current' : ''}`} />
               {c.likes_count > 0 && c.likes_count}
             </button>
-            {!isReply && user && (
+            {!isReply && canReply() && (
               <button
                 onClick={() => setReplyTo(r => r?.id === c.id ? null : { id: c.id, username: c.profiles?.username })}
                 className="text-xs text-gray-600 hover:text-brand-400 transition-colors flex items-center gap-1">
@@ -265,7 +295,14 @@ export default function CommentModal({ post, onClose }) {
           ))}
         </div>
 
-        {user && (
+        {user && !canComment() && (
+          <div className="border-t border-[#2a2a3f] px-4 py-3 text-center text-xs text-gray-500">
+            {ownerSettings?.who_can_comment === 'none'
+              ? 'Bu gönderiye yorum kapalı'
+              : 'Yorum yapmak için takipçi olman gerekiyor'}
+          </div>
+        )}
+        {canComment() && (
           <div className="border-t border-[#2a2a3f]">
             {/* GIF picker */}
             {showGifPicker && (
