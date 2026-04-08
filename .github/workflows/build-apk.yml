@@ -90,40 +90,20 @@ jobs:
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > /tmp/gifwave-release.keystore
 
-      - name: Write keystore properties
-        working-directory: frontend/android
-        run: |
-          cat > keystore.properties << EOF
-          storeFile=/tmp/gifwave-release.keystore
-          storePassword=${{ secrets.STORE_PASSWORD }}
-          keyAlias=${{ secrets.KEY_ALIAS }}
-          keyPassword=${{ secrets.KEY_PASSWORD }}
-          EOF
-
-      - name: Patch app build.gradle for signing
-        working-directory: frontend/android
-        run: |
-          # Signing config'i mevcut build.gradle'a ekle
-          sed -i '/android {/a\
-              def keystorePropertiesFile = rootProject.file("keystore.properties")\
-              def keystoreProperties = new Properties()\
-              keystoreProperties.load(new FileInputStream(keystorePropertiesFile))\
-              signingConfigs {\
-                  release {\
-                      storeFile file(keystoreProperties["storeFile"])\
-                      storePassword keystoreProperties["storePassword"]\
-                      keyAlias keystoreProperties["keyAlias"]\
-                      keyPassword keystoreProperties["keyPassword"]\
-                  }\
-              }' app/build.gradle
-          # release buildType'a signingConfig ekle
-          sed -i '/buildTypes {/{n;/release {/a\                  signingConfig signingConfigs.release}' app/build.gradle || true
-
       - name: Build Release AAB
         working-directory: frontend/android
+        env:
+          STORE_FILE: /tmp/gifwave-release.keystore
+          STORE_PASS: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.KEY_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew bundleRelease --no-daemon
+          ./gradlew bundleRelease --no-daemon \
+            -Pandroid.injected.signing.store.file="$STORE_FILE" \
+            -Pandroid.injected.signing.store.password="$STORE_PASS" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASS"
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
