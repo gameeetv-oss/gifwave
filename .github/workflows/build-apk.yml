@@ -109,12 +109,11 @@ jobs:
           path: frontend/android/app/build/outputs/bundle/release/app-release.aab
           retention-days: 30
 
-      # Play Store otomatik yükleme ilk APK manuel yüklendikten sonra aktif edilecek
-      # - name: Upload to Play Store (Internal Testing)
-      #   uses: r0adkll/upload-google-play@v1
-      #   with:
-      #     serviceAccountJsonPlainText: ${{ secrets.SERVICE_ACCOUNT_JSON }}
-      #     packageName: com.gifwave.app
-      #     releaseFiles: frontend/android/app/build/outputs/bundle/release/app-release.aab
-      #     track: internal
-      #     status: completed
+      - name: Upload to Play Store (Internal Testing)
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.SERVICE_ACCOUNT_JSON }}
+          packageName: com.gifwave.app
+          releaseFiles: frontend/android/app/build/outputs/bundle/release/app-release.aab
+          track: internal
+          status: completed
