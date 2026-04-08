@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build & Deploy Android
 
 on:
   workflow_dispatch:
@@ -86,15 +86,32 @@ jobs:
           }
           EOF
 
-      - name: Build Debug APK
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > /tmp/gifwave-release.keystore
+
+      - name: Build Release AAB
         working-directory: frontend/android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew bundleRelease --no-daemon \
+            -Pandroid.injected.signing.store.file=/tmp/gifwave-release.keystore \
+            -Pandroid.injected.signing.store.password=${{ secrets.STORE_PASSWORD }} \
+            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
+            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
 
-      - name: Upload APK artifact
+      - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
         with:
-          name: GifWave-debug
-          path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 7
+          name: GifWave-release
+          path: frontend/android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 30
+
+      - name: Upload to Play Store (Internal Testing)
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.SERVICE_ACCOUNT_JSON }}
+          packageName: com.gifwave.app
+          releaseFiles: frontend/android/app/build/outputs/bundle/release/app-release.aab
+          track: internal
+          status: completed
