@@ -90,15 +90,72 @@ jobs:
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > /tmp/gifwave-release.keystore
 
+      - name: Write keystore properties
+        working-directory: frontend/android
+        run: |
+          cat > keystore.properties << EOF
+          storeFile=/tmp/gifwave-release.keystore
+          storePassword=${{ secrets.STORE_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          keyPassword=${{ secrets.KEY_PASSWORD }}
+          EOF
+
+      - name: Patch app build.gradle for signing
+        working-directory: frontend/android
+        run: |
+          cat > app/build.gradle << 'GRADLE'
+          apply plugin: 'com.android.application'
+
+          def keystorePropertiesFile = rootProject.file("keystore.properties")
+          def keystoreProperties = new Properties()
+          if (keystorePropertiesFile.exists()) {
+              keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+          }
+
+          android {
+              namespace "com.gifwave.app"
+              compileSdk rootProject.ext.compileSdkVersion
+              defaultConfig {
+                  applicationId "com.gifwave.app"
+                  minSdkVersion rootProject.ext.minSdkVersion
+                  targetSdkVersion rootProject.ext.targetSdkVersion
+                  versionCode 1
+                  versionName "1.0"
+              }
+              signingConfigs {
+                  release {
+                      storeFile file(keystoreProperties['storeFile'])
+                      storePassword keystoreProperties['storePassword']
+                      keyAlias keystoreProperties['keyAlias']
+                      keyPassword keystoreProperties['keyPassword']
+                  }
+              }
+              buildTypes {
+                  release {
+                      minifyEnabled false
+                      signingConfig signingConfigs.release
+                  }
+              }
+          }
+
+          repositories {
+              flatDir {
+                  dirs '../capacitor-cordova-android-plugins/src/main'
+              }
+          }
+
+          dependencies {
+              implementation fileTree(include: ['*.jar'], dir: 'libs')
+              implementation project(':capacitor-android')
+              implementation project(':capacitor-cordova-android-plugins')
+          }
+          GRADLE
+
       - name: Build Release AAB
         working-directory: frontend/android
         run: |
           chmod +x gradlew
-          ./gradlew bundleRelease --no-daemon \
-            -Pandroid.injected.signing.store.file=/tmp/gifwave-release.keystore \
-            -Pandroid.injected.signing.store.password=${{ secrets.STORE_PASSWORD }} \
-            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
-            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
+          ./gradlew bundleRelease --no-daemon
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
