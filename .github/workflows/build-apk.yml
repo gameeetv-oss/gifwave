@@ -98,8 +98,9 @@ jobs:
           ./gradlew bundleRelease --no-daemon \
             -Pandroid.injected.signing.store.file="$STORE_FILE" \
             -Pandroid.injected.signing.store.password="$STORE_PASS" \
+            -Pandroid.injected.signing.store.type=PKCS12 \
             -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
-            -Pandroid.injected.signing.key.password="$KEY_PASS"
+            -Pandroid.injected.signing.key.password="$STORE_PASS"
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
