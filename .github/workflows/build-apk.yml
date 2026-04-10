@@ -114,8 +114,8 @@ jobs:
           path: frontend/android/app/build/outputs/bundle/release/app-release.aab
           retention-days: 30
 
-      - name: Upload to Play Store (Internal Testing)
-        uses: r0adkll/upload-google-play@v1
+      - name: Upload to Play Store (Closed Testing)
+        uses: r0adkll/upload-google-play@v3
         with:
           serviceAccountJsonPlainText: ${{ secrets.SERVICE_ACCOUNT_JSON }}
           packageName: com.gifwave.app
