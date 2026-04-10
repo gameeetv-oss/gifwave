@@ -19,6 +19,7 @@ import Premium from './pages/Premium'
 import PrivacyPolicy from './pages/PrivacyPolicy'
 import Terms from './pages/Terms'
 import DeleteAccount from './pages/DeleteAccount'
+import ChildSafety from './pages/ChildSafety'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -49,6 +50,7 @@ function AppRoutes() {
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/delete-account" element={<DeleteAccount />} />
+        <Route path="/child-safety" element={<ChildSafety />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </>
