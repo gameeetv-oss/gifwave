@@ -96,7 +96,7 @@ jobs:
           sed -i "s/versionCode $CURRENT/versionCode $NEW/" app/build.gradle
           echo "versionCode: $CURRENT → $NEW"
 
-      - name: Build Release AAB
+      - name: Build Release AAB + APK
         working-directory: frontend/android
         env:
           STORE_FILE: ${{ github.workspace }}/gifwave-release.keystore
@@ -105,7 +105,7 @@ jobs:
           KEY_PASS: ${{ secrets.KEY_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew bundleRelease --no-daemon \
+          ./gradlew bundleRelease assembleRelease --no-daemon \
             -Pandroid.injected.signing.store.file="$STORE_FILE" \
             -Pandroid.injected.signing.store.password="$STORE_PASS" \
             -Pandroid.injected.signing.store.type=PKCS12 \
@@ -117,6 +117,13 @@ jobs:
         with:
           name: GifWave-release
           path: frontend/android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 30
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GifWave-release-apk
+          path: frontend/android/app/build/outputs/apk/release/app-release.apk
           retention-days: 30
 
       - name: Upload to Play Store (Closed Testing)
