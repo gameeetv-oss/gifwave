@@ -371,6 +371,43 @@ async def shopier_webhook(request: Request):
     return {"status": "ok"}
 
 
+@app.post("/webhooks/revenuecat")
+async def revenuecat_webhook(request: Request):
+    """RevenueCat → Google Play satın alma bildirimi."""
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(400, "Geçersiz JSON")
+
+    event = data.get("event", {})
+    event_type = event.get("type", "")
+
+    # Aktif abonelik olayları
+    ACTIVE_EVENTS = {
+        "INITIAL_PURCHASE", "RENEWAL", "PRODUCT_CHANGE",
+        "UNCANCELLATION", "SUBSCRIBER_ALIAS",
+    }
+    if event_type not in ACTIVE_EVENTS:
+        return {"status": "ignored", "type": event_type}
+
+    app_user_id = event.get("app_user_id", "")
+    # RevenueCat app_user_id olarak Supabase user_id gönderiyoruz
+    if not app_user_id:
+        return {"status": "no_user_id"}
+
+    # Abonelik bitiş tarihini hesapla (genellikle 30 gün)
+    expiration_at_ms = event.get("expiration_at_ms")
+    if expiration_at_ms:
+        from datetime import timezone
+        until = datetime.fromtimestamp(expiration_at_ms / 1000, tz=timezone.utc).isoformat()
+        await _sb_update("profiles", {"id": app_user_id},
+                         {"is_premium": True, "premium_until": until})
+    else:
+        await _activate_premium(app_user_id, days=32)
+
+    return {"status": "ok", "user": app_user_id}
+
+
 @app.post("/admin/generate-codes")
 async def generate_codes(req: GenerateCodesRequest):
     if req.admin_key != ADMIN_KEY:

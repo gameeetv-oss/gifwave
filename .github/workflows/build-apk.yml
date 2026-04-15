@@ -28,11 +28,12 @@ jobs:
           VITE_SUPABASE_URL: https://nwdwfwokdpjdkpsztuuo.supabase.co
           VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53ZHdmd29rZHBqZGtwc3p0dXVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NTMzODMsImV4cCI6MjA4ODIyOTM4M30.H9_9Noz8A2kOeP1J2yHP9Vr_06S9T2q0UWdTL3Z1wUo
           VITE_BACKEND_URL: https://gifwave-backend.onrender.com
+          VITE_REVENUECAT_API_KEY: ${{ secrets.REVENUECAT_API_KEY }}
 
       - name: Install Capacitor
         working-directory: frontend
         run: |
-          npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor-community/admob
+          npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor-community/admob @revenuecat/purchases-capacitor
 
       - name: Add Android platform
         working-directory: frontend
@@ -89,7 +90,11 @@ jobs:
       - name: Bump versionCode
         working-directory: frontend/android
         run: |
-          sed -i 's/versionCode [0-9]*/versionCode 2/' app/build.gradle
+          # Her build otomatik artar
+          CURRENT=$(grep 'versionCode ' app/build.gradle | grep -o '[0-9]*')
+          NEW=$((CURRENT + 1))
+          sed -i "s/versionCode $CURRENT/versionCode $NEW/" app/build.gradle
+          echo "versionCode: $CURRENT → $NEW"
 
       - name: Build Release AAB
         working-directory: frontend/android

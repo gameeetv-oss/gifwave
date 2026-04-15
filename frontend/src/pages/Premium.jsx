@@ -1,14 +1,12 @@
 import { useState } from 'react'
-import { Crown, Check, Zap, Image, Upload, Star, X, Loader2, Gift } from 'lucide-react'
+import { Crown, Check, Zap, Image, Upload, Star, X, Loader2, Gift, RefreshCw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import { usePurchases } from '../hooks/usePurchases'
 import toast from 'react-hot-toast'
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
-
-// Ödeme linkleri — Whop/Shopier ürün ID'nizi buraya girin
 const WHOP_LINK = 'https://whop.com/gifwave/gifwave-premium'
-const SHOPIER_LINK = 'https://www.shopier.com/gifwave-premium'
 const PRICE_TRY = '49'
 
 const BENEFITS = [
@@ -21,16 +19,47 @@ const BENEFITS = [
 
 export default function Premium({ onClose }) {
   const { user, profile, fetchProfile } = useAuth()
-  const [tab, setTab] = useState('whop')
+  const [tab, setTab] = useState('pay')
   const [code, setCode] = useState('')
   const [email, setEmail] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [webLoading, setWebLoading] = useState(false)
+
+  const { isNative, offering, loading: rcLoading, purchasePremium, restorePurchases } = usePurchases(user?.id)
 
   const isPremium = profile?.is_premium && (!profile?.premium_until || new Date(profile.premium_until) > new Date())
+  const price = offering?.availablePackages?.[0]?.product?.priceString || `₺${PRICE_TRY}/ay`
+
+  async function handleNativePurchase() {
+    try {
+      const result = await purchasePremium()
+      if (result) {
+        await fetchProfile(user.id)
+        toast.success('Premium aktif! Hoş geldin 👑')
+        onClose?.()
+      }
+    } catch (e) {
+      toast.error(e.message || 'Satın alma başarısız')
+    }
+  }
+
+  async function handleRestore() {
+    try {
+      const result = await restorePurchases()
+      if (result) {
+        await fetchProfile(user.id)
+        toast.success('Abonelik geri yüklendi!')
+        onClose?.()
+      } else {
+        toast.error('Aktif abonelik bulunamadı')
+      }
+    } catch (e) {
+      toast.error('Geri yükleme başarısız')
+    }
+  }
 
   async function activateWithCode() {
     if (!code.trim()) return
-    setLoading(true)
+    setWebLoading(true)
     try {
       const res = await fetch(`${BACKEND_URL}/premium/activate`, {
         method: 'POST',
@@ -43,12 +72,12 @@ export default function Premium({ onClose }) {
       toast.success('Premium aktif!')
       onClose?.()
     } catch (err) { toast.error(err.message) }
-    finally { setLoading(false) }
+    finally { setWebLoading(false) }
   }
 
   async function activateWithEmail() {
     if (!email.trim()) return
-    setLoading(true)
+    setWebLoading(true)
     try {
       const res = await fetch(`${BACKEND_URL}/premium/verify-payment`, {
         method: 'POST',
@@ -61,13 +90,14 @@ export default function Premium({ onClose }) {
       toast.success('Premium aktif!')
       onClose?.()
     } catch (err) { toast.error(err.message) }
-    finally { setLoading(false) }
+    finally { setWebLoading(false) }
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
       onClick={onClose}>
       <div className="card w-full max-w-md max-h-[90vh] overflow-y-auto animate-slide-up" onClick={e => e.stopPropagation()}>
+
         {/* Header */}
         <div className="relative p-6 bg-gradient-to-br from-yellow-500/20 via-brand-500/10 to-transparent rounded-t-2xl">
           {onClose && (
@@ -79,7 +109,7 @@ export default function Premium({ onClose }) {
             <Crown className="w-8 h-8 text-yellow-400" />
             <div>
               <h2 className="font-black text-xl text-white">GifWave Premium</h2>
-              <p className="text-yellow-400 text-sm font-semibold">Aylık ₺{PRICE_TRY}</p>
+              <p className="text-yellow-400 text-sm font-semibold">Aylık {price}</p>
             </div>
           </div>
           {isPremium && (
@@ -110,49 +140,89 @@ export default function Premium({ onClose }) {
 
         {!isPremium && (
           <div className="p-5 space-y-4">
-            {/* Ödeme seçenekleri tab */}
-            <div className="flex rounded-xl overflow-hidden border border-[#3a3a5c]">
-              {[
-                { id: 'whop', label: 'Whop' },
-                { id: 'kod', label: 'Aktivasyon Kodu' },
-              ].map(({ id, label }) => (
-                <button key={id} onClick={() => setTab(id)}
-                  className={`flex-1 py-2 text-xs font-medium transition-colors ${tab === id ? 'bg-brand-500 text-white' : 'text-gray-400 hover:text-white'}`}>
-                  {label}
-                </button>
-              ))}
-            </div>
 
-            {tab === 'whop' && (
+            {/* === ANDROID: Google Play Billing === */}
+            {isNative ? (
               <div className="space-y-3">
-                <p className="text-sm text-gray-400 text-center">Whop ile uluslararası kart ile ödeme yap.</p>
-                <a href={WHOP_LINK} target="_blank" rel="noopener noreferrer"
+                <button
+                  onClick={handleNativePurchase}
+                  disabled={rcLoading}
                   className="btn-primary w-full py-3 flex items-center justify-center gap-2 text-sm font-bold">
-                  <Crown className="w-4 h-4" /> Whop'ta Satın Al — ₺{PRICE_TRY}/ay
-                </a>
-                <div className="border-t border-[#2a2a3f] pt-3">
-                  <p className="text-xs text-gray-500 mb-2">Ödeme sonrası kullandığın e-postayı gir:</p>
+                  {rcLoading
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <><Crown className="w-4 h-4" /> Abone Ol — {price}</>}
+                </button>
+                <button
+                  onClick={handleRestore}
+                  className="w-full text-xs text-gray-500 hover:text-gray-300 flex items-center justify-center gap-1 py-1">
+                  <RefreshCw className="w-3 h-3" /> Satın almayı geri yükle
+                </button>
+
+                <div className="border-t border-[#2a2a3f] pt-3 space-y-2">
+                  <p className="text-xs text-gray-500 text-center">Aktivasyon kodun var mı?</p>
                   <div className="flex gap-2">
-                    <input className="input flex-1 text-sm py-2" placeholder="ödeme e-postası..." value={email} onChange={e => setEmail(e.target.value)} />
-                    <button onClick={activateWithEmail} disabled={loading || !email.trim()} className="btn-primary px-3 py-2 text-sm flex-shrink-0">
-                      {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Aktif Et'}
+                    <input className="input flex-1 text-sm py-2 font-mono tracking-wider uppercase"
+                      placeholder="XXXX-XXXX-XXXX" value={code}
+                      onChange={e => setCode(e.target.value.toUpperCase())} />
+                    <button onClick={activateWithCode} disabled={webLoading || !code.trim()}
+                      className="btn-primary px-4 py-2 text-sm flex-shrink-0 flex items-center gap-1">
+                      {webLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Gift className="w-4 h-4" /> Uygula</>}
                     </button>
                   </div>
                 </div>
               </div>
-            )}
 
-            {tab === 'kod' && (
-              <div className="space-y-3">
-                <p className="text-sm text-gray-400 text-center">Aldığın aktivasyon kodunu gir.</p>
-                <div className="flex gap-2">
-                  <input className="input flex-1 text-sm py-2 font-mono tracking-wider uppercase"
-                    placeholder="XXXX-XXXX-XXXX" value={code} onChange={e => setCode(e.target.value.toUpperCase())} />
-                  <button onClick={activateWithCode} disabled={loading || !code.trim()} className="btn-primary px-4 py-2 text-sm flex-shrink-0 flex items-center gap-1">
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Gift className="w-4 h-4" /> Uygula</>}
-                  </button>
+            ) : (
+              /* === WEB: Whop + Aktivasyon Kodu === */
+              <>
+                <div className="flex rounded-xl overflow-hidden border border-[#3a3a5c]">
+                  {[
+                    { id: 'pay', label: 'Whop' },
+                    { id: 'kod', label: 'Aktivasyon Kodu' },
+                  ].map(({ id, label }) => (
+                    <button key={id} onClick={() => setTab(id)}
+                      className={`flex-1 py-2 text-xs font-medium transition-colors ${tab === id ? 'bg-brand-500 text-white' : 'text-gray-400 hover:text-white'}`}>
+                      {label}
+                    </button>
+                  ))}
                 </div>
-              </div>
+
+                {tab === 'pay' && (
+                  <div className="space-y-3">
+                    <p className="text-sm text-gray-400 text-center">Uluslararası kart ile ödeme yap.</p>
+                    <a href={WHOP_LINK} target="_blank" rel="noopener noreferrer"
+                      className="btn-primary w-full py-3 flex items-center justify-center gap-2 text-sm font-bold">
+                      <Crown className="w-4 h-4" /> Satın Al — ₺{PRICE_TRY}/ay
+                    </a>
+                    <div className="border-t border-[#2a2a3f] pt-3">
+                      <p className="text-xs text-gray-500 mb-2">Ödeme sonrası e-postanı gir:</p>
+                      <div className="flex gap-2">
+                        <input className="input flex-1 text-sm py-2" placeholder="ödeme e-postası..."
+                          value={email} onChange={e => setEmail(e.target.value)} />
+                        <button onClick={activateWithEmail} disabled={webLoading || !email.trim()}
+                          className="btn-primary px-3 py-2 text-sm flex-shrink-0">
+                          {webLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Aktif Et'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {tab === 'kod' && (
+                  <div className="space-y-3">
+                    <p className="text-sm text-gray-400 text-center">Aktivasyon kodunu gir.</p>
+                    <div className="flex gap-2">
+                      <input className="input flex-1 text-sm py-2 font-mono tracking-wider uppercase"
+                        placeholder="XXXX-XXXX-XXXX" value={code}
+                        onChange={e => setCode(e.target.value.toUpperCase())} />
+                      <button onClick={activateWithCode} disabled={webLoading || !code.trim()}
+                        className="btn-primary px-4 py-2 text-sm flex-shrink-0 flex items-center gap-1">
+                        {webLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Gift className="w-4 h-4" /> Uygula</>}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
