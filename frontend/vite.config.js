@@ -49,7 +49,7 @@ export default defineConfig({
   server: { port: 3000 },
   build: {
     rollupOptions: {
-      external: ['@capacitor-community/admob'],
+      external: ['@capacitor-community/admob', '@revenuecat/purchases-capacitor'],
     },
   },
 })
