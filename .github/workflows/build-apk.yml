@@ -90,11 +90,11 @@ jobs:
       - name: Bump versionCode
         working-directory: frontend/android
         run: |
-          # Her build otomatik artar
+          # GitHub run_number kullan — her zaman benzersiz ve artan
+          NEW=${{ github.run_number }}
           CURRENT=$(grep 'versionCode ' app/build.gradle | grep -o '[0-9]*')
-          NEW=$((CURRENT + 1))
           sed -i "s/versionCode $CURRENT/versionCode $NEW/" app/build.gradle
-          echo "versionCode: $CURRENT → $NEW"
+          echo "versionCode: $NEW"
 
       - name: Build Release AAB + APK
         working-directory: frontend/android
