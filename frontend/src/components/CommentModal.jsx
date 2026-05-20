@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { X, Send, Heart, CornerDownRight, BadgeCheck, Trash2, Pencil, Check, Film, Loader2 } from 'lucide-react'
+import { X, Send, Heart, CornerDownRight, BadgeCheck, Trash2, Pencil, Check, Film, Loader2, Smile } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useBlock } from '../context/BlockContext'
@@ -31,9 +31,18 @@ export default function CommentModal({ post, onClose }) {
   const [ownerSettings, setOwnerSettings] = useState(null)
   const [isFollowingOwner, setIsFollowingOwner] = useState(false)
 
+  // Reactions
+  const [reactions, setReactions] = useState([])
+  const [myReaction, setMyReaction] = useState(null)
+  const [showReactionPicker, setShowReactionPicker] = useState(false)
+  const [reactionQuery, setReactionQuery] = useState('')
+  const [reactionResults, setReactionResults] = useState([])
+  const [reactionSearchLoading, setReactionSearchLoading] = useState(false)
+
   useEffect(() => {
     loadComments()
     loadOwnerSettings()
+    loadReactions()
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = '' }
   }, [])
@@ -45,6 +54,58 @@ export default function CommentModal({ post, onClose }) {
       const { data: f } = await supabase.from('follows').select('status').eq('follower_id', user.id).eq('following_id', post.user_id).maybeSingle()
       setIsFollowingOwner(f?.status === 'accepted')
     }
+  }
+
+  async function loadReactions() {
+    const { data } = await supabase
+      .from('reactions')
+      .select('*, profiles!reactions_user_id_fkey(username, display_name, avatar_url)')
+      .eq('post_id', post.id)
+      .order('created_at', { ascending: true })
+    setReactions(data || [])
+    if (user) {
+      const mine = (data || []).find(r => r.user_id === user.id)
+      setMyReaction(mine || null)
+    }
+  }
+
+  async function searchReactionGif() {
+    if (!reactionQuery.trim()) return
+    setReactionSearchLoading(true)
+    try {
+      const res = await fetch(`${BACKEND_URL}/giphy/search?q=${encodeURIComponent(reactionQuery)}&limit=12`)
+      const data = await res.json()
+      setReactionResults(data.gifs || [])
+    } catch { toast.error(t('comments.gifSearchError')) }
+    finally { setReactionSearchLoading(false) }
+  }
+
+  async function toggleReaction(gifUrl, gifPreview) {
+    if (!user) { toast.error(t('reactions.loginRequired')); return }
+    if (myReaction) {
+      await supabase.from('reactions').delete().eq('id', myReaction.id)
+      setMyReaction(null)
+      setReactions(rs => rs.filter(r => r.id !== myReaction.id))
+      if (gifUrl === myReaction.gif_url) {
+        setShowReactionPicker(false)
+        setReactionResults([])
+        setReactionQuery('')
+        return
+      }
+    }
+    const { data, error } = await supabase.from('reactions').insert({
+      post_id: post.id,
+      user_id: user.id,
+      gif_url: gifUrl,
+      gif_preview: gifPreview || gifUrl
+    }).select('*, profiles!reactions_user_id_fkey(username, display_name, avatar_url)').single()
+    if (!error && data) {
+      setMyReaction(data)
+      setReactions(rs => [...rs, data])
+    }
+    setShowReactionPicker(false)
+    setReactionResults([])
+    setReactionQuery('')
   }
 
   const isPostOwner = user?.id === post.user_id
@@ -283,6 +344,63 @@ export default function CommentModal({ post, onClose }) {
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Reactions strip */}
+        {(reactions.length > 0 || user) && (
+          <div className="px-4 py-2 border-b border-[#2a2a3f] flex items-center gap-2 flex-wrap">
+            {reactions.map(r => (
+              <button
+                key={r.id}
+                onClick={() => user && toggleReaction(r.gif_url, r.gif_preview)}
+                title={r.profiles?.display_name || r.profiles?.username}
+                className={`relative flex-shrink-0 rounded-lg overflow-hidden transition-all active:scale-90 ${r.user_id === user?.id ? 'ring-2 ring-brand-400' : 'opacity-80 hover:opacity-100'}`}
+                style={{ width: 60, height: 60 }}>
+                <img src={r.gif_preview || r.gif_url} alt="reaction" className="w-full h-full object-cover" />
+              </button>
+            ))}
+            {user && (
+              <button
+                onClick={() => { setShowReactionPicker(s => !s); setShowGifPicker(false) }}
+                title={myReaction ? t('reactions.removeReaction') : t('reactions.addReaction')}
+                className={`w-[60px] h-[60px] flex flex-col items-center justify-center rounded-lg border transition-colors flex-shrink-0 text-xs gap-1 ${showReactionPicker ? 'border-brand-400 text-brand-400 bg-brand-500/10' : 'border-[#2a2a3f] text-gray-500 hover:border-brand-400 hover:text-brand-400'}`}>
+                <Smile className="w-5 h-5" />
+                <span>{t('reactions.react')}</span>
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Reaction GIF picker */}
+        {showReactionPicker && (
+          <div className="px-4 pt-3 pb-2 space-y-2 border-b border-[#2a2a3f]">
+            <div className="flex gap-2">
+              <input
+                className="input flex-1 text-sm py-1.5"
+                placeholder={t('reactions.searchPlaceholder')}
+                value={reactionQuery}
+                onChange={e => setReactionQuery(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && searchReactionGif()}
+                autoFocus
+              />
+              <button onClick={searchReactionGif} disabled={reactionSearchLoading} className="btn-primary px-3 py-1.5">
+                {reactionSearchLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : t('comments.search')}
+              </button>
+            </div>
+            {reactionResults.length > 0 && (
+              <div className="grid grid-cols-4 gap-1.5 max-h-40 overflow-y-auto">
+                {reactionResults.map(gif => (
+                  <img
+                    key={gif.id}
+                    src={gif.preview}
+                    alt=""
+                    onClick={() => toggleReaction(gif.url, gif.preview)}
+                    className="w-full h-16 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
           {topComments.length === 0 && <p className="text-gray-500 text-center py-8 text-sm">{t('comments.firstComment')}</p>}

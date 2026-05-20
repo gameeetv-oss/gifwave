@@ -115,11 +115,17 @@ export default function Explore() {
   }
 
   async function loadTrendingTags() {
-    const { data } = await supabase.from('posts').select('tags').not('tags', 'is', null)
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+    const { data } = await supabase
+      .from('posts')
+      .select('tags')
+      .not('tags', 'is', null)
+      .gte('created_at', since)
+      .limit(200)
     if (!data) return
     const tagCount = {}
     data.forEach(p => p.tags?.forEach(t => { tagCount[t] = (tagCount[t] || 0) + 1 }))
-    const sorted = Object.entries(tagCount).sort((a, b) => b[1] - a[1]).slice(0, 12)
+    const sorted = Object.entries(tagCount).sort((a, b) => b[1] - a[1]).slice(0, 10)
     setTrendingTags(sorted)
   }
 
@@ -438,15 +444,21 @@ export default function Explore() {
 
       {/* Trend tag'ler */}
       {trendingTags.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-6">
-          {trendingTags.map(([tag, count]) => (
-            <button key={tag}
-              onClick={() => { setQuery('#' + tag); handleSearch('#' + tag) }}
-              className="flex items-center gap-1 bg-[#1a1a2e] hover:bg-brand-500/20 border border-[#3a3a5c] hover:border-brand-500/50 rounded-full px-3 py-1.5 text-sm text-gray-300 hover:text-brand-300 transition-all">
-              <Hash className="w-3.5 h-3.5" />{tag}
-              <span className="text-gray-600 text-xs">{count}</span>
-            </button>
-          ))}
+        <div className="mb-6">
+          <h2 className="font-semibold text-gray-300 mb-3 flex items-center gap-2 text-sm">
+            <TrendingUp className="w-4 h-4 text-[#e94560]" />
+            <span className="text-[#e94560]">{t('explore.trending_tags')}</span>
+          </h2>
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+            {trendingTags.map(([tag, count]) => (
+              <button key={tag}
+                onClick={() => { setQuery('#' + tag); handleSearch('#' + tag) }}
+                className="flex-shrink-0 flex items-center gap-1 bg-[#1a1a2e] hover:bg-[#e94560]/20 border border-[#3a3a5c] hover:border-[#e94560]/60 rounded-full px-3 py-1.5 text-sm text-gray-300 hover:text-[#e94560] transition-all">
+                <Hash className="w-3.5 h-3.5 text-[#e94560]" />{tag}
+                <span className="text-gray-600 text-xs ml-0.5">{count}</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

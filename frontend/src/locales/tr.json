@@ -87,7 +87,8 @@
     "addToProfile": "Ekle",
     "addAndEdit": "Ekle ve Düzenle",
     "requestSent": "İstek Gönderildi",
-    "following": "Takip Ediliyor"
+    "following": "Takip Ediliyor",
+    "trending_tags": "Trend Etiketler"
   },
   "upload": {
     "title": "Paylaş",
@@ -426,6 +427,13 @@
     "search": "Ara",
     "gifSearchError": "GIF arama hatası"
   },
+  "reactions": {
+    "searchPlaceholder": "GIF ara...",
+    "addReaction": "GIF Tepki Ekle",
+    "react": "Tepki ver",
+    "loginRequired": "Tepki vermek için giriş yap",
+    "removeReaction": "Tepkini kaldır"
+  },
   "feed": {
     "noGifs": "Henüz GIF yok",
     "followSomeone": "Birilerini takip et!",
@@ -438,5 +446,21 @@
     "noFollowing": "Henüz takip edilen yok",
     "unfollow": "Çıkar",
     "unfollowed": "@{{username}} takipten çıkıldı"
+  },
+  "collections": {
+    "title": "Koleksiyonlar",
+    "save": "Kaydet",
+    "newCollection": "Yeni Koleksiyon",
+    "namePlaceholder": "Koleksiyon adı...",
+    "create": "Oluştur",
+    "saved": "Kaydedildi!",
+    "removed": "Kaldırıldı",
+    "empty": "Henüz kaydedilmiş GIF yok.",
+    "loginRequired": "Kaydetmek için giriş yap",
+    "noCollections": "Henüz koleksiyon yok.",
+    "gifCount": "{{count}} GIF",
+    "backToCollections": "Koleksiyonlara Dön",
+    "deleteCollection": "Koleksiyonu Sil",
+    "deleteConfirm": "Bu koleksiyonu silmek istiyor musun?"
   }
 }

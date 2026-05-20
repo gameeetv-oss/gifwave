@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useInView } from 'react-intersection-observer'
-import { Heart, MessageCircle, Share2, Repeat2, MoreHorizontal, Pencil, Check, X, Loader2, Trash2, BadgeCheck, Play, Pause, Music, ExternalLink, VolumeX, Volume2, Crown, Flag, Languages } from 'lucide-react'
+import { Heart, MessageCircle, Share2, Repeat2, MoreHorizontal, Pencil, Check, X, Loader2, Trash2, BadgeCheck, Play, Pause, Music, ExternalLink, VolumeX, Volume2, Crown, Flag, Languages, Bookmark, Smile } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
@@ -36,9 +36,16 @@ export default function GIFCard({ post, onDelete }) {
   const [commentCount, setCommentCount] = useState(post.comments_count || 0)
   const [reposted, setReposted] = useState(post.user_reposted || false)
   const [repostCount, setRepostCount] = useState(post.reposts_count || 0)
+  const [reactionCount, setReactionCount] = useState(0)
   const [showComments, setShowComments] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
   const [showReport, setShowReport] = useState(false)
+  const [showSaveModal, setShowSaveModal] = useState(false)
+  const [collections, setCollections] = useState([])
+  const [savedCollectionIds, setSavedCollectionIds] = useState(new Set())
+  const [newColName, setNewColName] = useState('')
+  const [creatingCol, setCreatingCol] = useState(false)
+  const [loadingCollections, setLoadingCollections] = useState(false)
   const [editMode, setEditMode] = useState(false)
   const [editCaption, setEditCaption] = useState(post.caption || '')
   const [editOverlay, setEditOverlay] = useState(() => {
@@ -55,6 +62,11 @@ export default function GIFCard({ post, onDelete }) {
 
   useEffect(() => { setLiked(post.user_liked || false) }, [post.user_liked])
   useEffect(() => { setReposted(post.user_reposted || false) }, [post.user_reposted])
+
+  useEffect(() => {
+    supabase.from('reactions').select('id', { count: 'exact', head: true }).eq('post_id', post.id)
+      .then(({ count }) => { if (count != null) setReactionCount(count) })
+  }, [post.id])
 
   // ── Müzik ──────────────────────────────────────────────────
   const audioRef = useRef(null)
@@ -248,9 +260,56 @@ export default function GIFCard({ post, onDelete }) {
     setTranslating(false)
   }
 
+  async function openSaveModal() {
+    if (!user) { toast.error(t('collections.loginRequired')); return }
+    setShowSaveModal(true)
+    setLoadingCollections(true)
+    const [colRes, itemRes] = await Promise.all([
+      supabase.from('collections').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+      supabase.from('collection_items').select('collection_id').eq('user_id', user.id).eq('post_id', post.id),
+    ])
+    setCollections(colRes.data || [])
+    setSavedCollectionIds(new Set((itemRes.data || []).map(i => i.collection_id)))
+    setLoadingCollections(false)
+  }
+
+  async function toggleSaveToCollection(collectionId) {
+    if (!user) return
+    if (savedCollectionIds.has(collectionId)) {
+      await supabase.from('collection_items').delete()
+        .eq('collection_id', collectionId).eq('post_id', post.id).eq('user_id', user.id)
+      setSavedCollectionIds(s => { const n = new Set(s); n.delete(collectionId); return n })
+      toast(t('collections.removed'))
+    } else {
+      await supabase.from('collection_items').insert({ collection_id: collectionId, post_id: post.id, user_id: user.id })
+      setSavedCollectionIds(s => new Set([...s, collectionId]))
+      toast.success(t('collections.saved'))
+    }
+  }
+
+  async function createCollection() {
+    if (!newColName.trim() || !user) return
+    setCreatingCol(true)
+    const { data, error } = await supabase.from('collections')
+      .insert({ user_id: user.id, name: newColName.trim() })
+      .select().single()
+    if (!error && data) {
+      setCollections(c => [data, ...c])
+      setNewColName('')
+      await supabase.from('collection_items').insert({ collection_id: data.id, post_id: post.id, user_id: user.id })
+      setSavedCollectionIds(s => new Set([...s, data.id]))
+      toast.success(t('collections.saved'))
+    }
+    setCreatingCol(false)
+  }
+
+  const isBookmarked = savedCollectionIds.size > 0
+
   function handleCommentClose(newCount) {
     setShowComments(false)
     if (typeof newCount === 'number') setCommentCount(newCount)
+    supabase.from('reactions').select('id', { count: 'exact', head: true }).eq('post_id', post.id)
+      .then(({ count }) => { if (count != null) setReactionCount(count) })
   }
 
   const caption = currentPost.caption || ''
@@ -402,6 +461,12 @@ export default function GIFCard({ post, onDelete }) {
             <span className="text-white text-xs font-semibold drop-shadow">{commentCount}</span>
           </button>
 
+          {/* Reactions */}
+          <button onClick={() => setShowComments(true)} className="flex flex-col items-center gap-1">
+            <Smile className="w-8 h-8 text-white drop-shadow-lg active:scale-110 transition-transform" />
+            <span className="text-white text-xs font-semibold drop-shadow">{reactionCount > 0 ? reactionCount : t('reactions.react')}</span>
+          </button>
+
           {/* Repost */}
           <button onClick={toggleRepost} className="flex flex-col items-center gap-1">
             <Repeat2 className={`w-8 h-8 drop-shadow-lg transition-transform active:scale-110 ${reposted ? 'text-green-400' : 'text-white'}`} />
@@ -412,6 +477,12 @@ export default function GIFCard({ post, onDelete }) {
           <button onClick={share} className="flex flex-col items-center gap-1">
             <Share2 className="w-7 h-7 text-white drop-shadow-lg active:scale-110 transition-transform" />
             <span className="text-white text-xs font-semibold drop-shadow">{t('gifcard.share')}</span>
+          </button>
+
+          {/* Bookmark */}
+          <button onClick={openSaveModal} className="flex flex-col items-center gap-1">
+            <Bookmark className={`w-7 h-7 drop-shadow-lg active:scale-110 transition-transform ${isBookmarked ? 'fill-yellow-400 text-yellow-400' : 'text-white'}`} />
+            <span className="text-white text-xs font-semibold drop-shadow">{t('collections.save')}</span>
           </button>
 
           {/* More */}
@@ -489,6 +560,55 @@ export default function GIFCard({ post, onDelete }) {
           reportedUserId={currentPost.user_id}
           onClose={() => setShowReport(false)}
         />
+      )}
+      {showSaveModal && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-end justify-center" onClick={() => setShowSaveModal(false)}>
+          <div className="bg-[#1a1a2e] rounded-t-2xl w-full max-w-lg p-5 pb-8" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-white font-bold text-lg">{t('collections.save')}</h3>
+              <button onClick={() => setShowSaveModal(false)} className="text-gray-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            {loadingCollections ? (
+              <div className="flex justify-center py-6"><Loader2 className="w-6 h-6 animate-spin text-brand-400" /></div>
+            ) : (
+              <div className="space-y-2 max-h-64 overflow-y-auto mb-4">
+                {collections.length === 0 && (
+                  <p className="text-gray-500 text-sm text-center py-4">{t('collections.noCollections')}</p>
+                )}
+                {collections.map(col => (
+                  <button key={col.id} onClick={() => toggleSaveToCollection(col.id)}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-colors ${
+                      savedCollectionIds.has(col.id)
+                        ? 'bg-brand-500/20 border border-brand-500/40'
+                        : 'bg-white/5 hover:bg-white/10'
+                    }`}>
+                    <span className="text-white text-sm font-medium">{col.name}</span>
+                    {savedCollectionIds.has(col.id) && <Bookmark className="w-4 h-4 fill-yellow-400 text-yellow-400" />}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="border-t border-[#2a2a3f] pt-4">
+              <p className="text-gray-400 text-xs mb-2">{t('collections.newCollection')}</p>
+              <div className="flex gap-2">
+                <input
+                  className="flex-1 bg-[#0d0d1a] border border-[#3a3a5c] rounded-xl px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-brand-500"
+                  placeholder={t('collections.namePlaceholder')}
+                  value={newColName}
+                  onChange={e => setNewColName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && createCollection()}
+                />
+                <button onClick={createCollection} disabled={creatingCol || !newColName.trim()}
+                  className="btn-primary text-sm px-4 py-2 flex items-center gap-1 disabled:opacity-50">
+                  {creatingCol ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                  {t('collections.create')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )

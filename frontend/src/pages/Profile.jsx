@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import {
   Camera, Loader2, UserPlus, UserMinus, Heart, Repeat2, Grid3x3,
   Pencil, Trash2, Check, X, BadgeCheck, MessageSquare, Clock, ShieldOff, Shield, MoreHorizontal,
-  Flag, HelpCircle
+  Flag, HelpCircle, FolderOpen
 } from 'lucide-react'
 import GIFCard from '../components/GIFCard'
 import FollowModal from '../components/FollowModal'
@@ -26,6 +26,8 @@ export default function Profile() {
   const [posts, setPosts]           = useState([])
   const [reposts, setReposts]       = useState([])
   const [liked, setLiked]           = useState([])
+  const [collections, setCollections] = useState([])
+  const [loadingCollections, setLoadingCollections] = useState(false)
   const [followStatus, setFollowStatus] = useState(null)
   const [isBlocked, setIsBlocked]   = useState(false)
   const [loading, setLoading]       = useState(true)
@@ -43,12 +45,29 @@ export default function Profile() {
   const { onlineUsers } = usePresence()
 
   const TABS = [
-    { id: 'posts',   label: t('profile.tabs.posts'),   icon: Grid3x3 },
-    { id: 'reposts', label: t('profile.tabs.reposts'), icon: Repeat2 },
-    { id: 'liked',   label: t('profile.tabs.liked'),   icon: Heart },
+    { id: 'posts',       label: t('profile.tabs.posts'),       icon: Grid3x3 },
+    { id: 'reposts',     label: t('profile.tabs.reposts'),     icon: Repeat2 },
+    { id: 'liked',       label: t('profile.tabs.liked'),       icon: Heart },
+    { id: 'collections', label: t('collections.title'),        icon: FolderOpen, meOnly: true },
   ]
 
   useEffect(() => { loadProfile() }, [username, user?.id])
+
+  useEffect(() => {
+    if (tab === 'collections' && isMe && user) loadCollections()
+  }, [tab, isMe, user])
+
+  async function loadCollections() {
+    setLoadingCollections(true)
+    const { data: cols } = await supabase
+      .from('collections').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
+    if (!cols) { setLoadingCollections(false); return }
+    const counts = await Promise.all(
+      cols.map(c => supabase.from('collection_items').select('id', { count: 'exact', head: true }).eq('collection_id', c.id))
+    )
+    setCollections(cols.map((c, i) => ({ ...c, gif_count: counts[i].count || 0 })))
+    setLoadingCollections(false)
+  }
 
   async function loadProfile() {
     setLoading(true)
@@ -467,21 +486,46 @@ export default function Profile() {
 
       {/* Tabs */}
       <div className="flex border-b border-[#2a2a3f] mb-4">
-        {TABS.filter(t => t.id !== 'liked' || isMe || settings?.show_liked_posts !== false).map(({ id, label, icon: Icon }) => (
+        {TABS
+          .filter(tab => tab.id !== 'liked' || isMe || settings?.show_liked_posts !== false)
+          .filter(tab => !tab.meOnly || isMe)
+          .map(({ id, label, icon: Icon }) => (
           <button key={id} onClick={() => setTab(id)}
             className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-sm font-medium transition-colors ${
               tab === id ? 'text-brand-400 border-b-2 border-brand-400' : 'text-gray-400 hover:text-white'
             }`}>
             <Icon className="w-4 h-4" />
-            <span>{label}</span>
-            <span className="text-xs text-gray-600 ml-0.5">
-              ({id === 'posts' ? posts.length : id === 'reposts' ? reposts.length : liked.length})
-            </span>
+            <span className="hidden sm:inline">{label}</span>
+            {id !== 'collections' && (
+              <span className="text-xs text-gray-600 ml-0.5">
+                ({id === 'posts' ? posts.length : id === 'reposts' ? reposts.length : liked.length})
+              </span>
+            )}
           </button>
         ))}
       </div>
 
-      {!isMe && settings?.is_private && followStatus !== 'accepted' ? (
+      {tab === 'collections' && isMe ? (
+        loadingCollections ? (
+          <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-brand-400" /></div>
+        ) : collections.length === 0 ? (
+          <div className="text-center py-16 text-gray-500">
+            <FolderOpen className="w-12 h-12 mx-auto mb-3 text-gray-600" />
+            <p className="text-sm">{t('collections.noCollections')}</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {collections.map(col => (
+              <a key={col.id} href={`/collections`}
+                className="bg-[#1a1a2e] border border-[#2a2a3f] rounded-2xl p-4 hover:border-brand-500/50 hover:bg-[#1e1e38] transition-all block">
+                <FolderOpen className="w-8 h-8 text-brand-400 mb-3" />
+                <p className="text-white font-semibold text-sm truncate">{col.name}</p>
+                <p className="text-gray-500 text-xs mt-1">{t('collections.gifCount', { count: col.gif_count })}</p>
+              </a>
+            ))}
+          </div>
+        )
+      ) : !isMe && settings?.is_private && followStatus !== 'accepted' ? (
         <div className="text-center py-16 text-gray-500">
           <Shield className="w-12 h-12 mx-auto mb-3 text-gray-600" />
           <p className="text-base font-semibold text-gray-300 mb-1">{t('profile.privateAccountTitle')}</p>

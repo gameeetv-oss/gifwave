@@ -13,7 +13,9 @@ async function showInterstitialAd() {
   try {
     const platform = window.Capacitor?.getPlatform?.()
     if (platform !== 'android') return
-    const { AdMob } = await import(/* @vite-ignore */ '@capacitor-community/admob')
+    const adMobModule = await import(/* @vite-ignore */ '@capacitor-community/admob').catch(() => null)
+    if (!adMobModule) return
+    const { AdMob } = adMobModule
     await AdMob.prepareInterstitial({ adId: ANDROID_INTERSTITIAL_ID, isTesting: false })
     await AdMob.showInterstitial()
   } catch {}
