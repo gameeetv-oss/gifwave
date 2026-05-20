@@ -504,6 +504,61 @@ async def translate_text(text: str = Query(...), target: str = Query("tr")):
     return result
 
 
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://nwdwfwokdpjdkpsztuuo.supabase.co")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
+
+
+class ReportPayload(BaseModel):
+    post_id: str | None = None
+    reported_user_id: str | None = None
+    reason: str
+    details: str | None = None
+
+
+@app.post("/report")
+async def submit_report(payload: ReportPayload, request: Request):
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        raise HTTPException(401, "Unauthorized")
+    user_token = auth.split(" ", 1)[1]
+
+    # Verify the user JWT to get user id
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(
+            f"{SUPABASE_URL}/auth/v1/user",
+            headers={"Authorization": f"Bearer {user_token}", "apikey": SUPABASE_SERVICE_KEY}
+        )
+        if r.status_code != 200:
+            raise HTTPException(401, "Invalid token")
+        reporter_id = r.json().get("id")
+
+    if not reporter_id:
+        raise HTTPException(401, "Could not identify user")
+
+    # Insert with service role (bypasses RLS)
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.post(
+            f"{SUPABASE_URL}/rest/v1/reports",
+            headers={
+                "apikey": SUPABASE_SERVICE_KEY,
+                "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+                "Content-Type": "application/json",
+                "Prefer": "return=minimal",
+            },
+            json={
+                "reporter_id": reporter_id,
+                "post_id": payload.post_id,
+                "reported_user_id": payload.reported_user_id,
+                "reason": payload.reason,
+                "details": payload.details,
+            }
+        )
+        if r.status_code not in (200, 201):
+            raise HTTPException(500, "Report gönderilemedi")
+
+    return {"success": True}
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))

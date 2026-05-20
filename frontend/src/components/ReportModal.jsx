@@ -5,6 +5,8 @@ import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
 
+const BACKEND = import.meta.env.VITE_BACKEND_URL || 'https://gifwave-backend.onrender.com'
+
 export default function ReportModal({ postId, reportedUserId, onClose }) {
   const { user } = useAuth()
   const { t } = useTranslation()
@@ -27,14 +29,21 @@ export default function ReportModal({ postId, reportedUserId, onClose }) {
     if (!user) { toast.error(t('report.loginRequired')); return }
     setLoading(true)
     try {
-      const { error } = await supabase.from('reports').insert({
-        reporter_id: user.id,
-        reported_user_id: reportedUserId || null,
-        post_id: postId || null,
-        reason,
-        details: details.trim() || null,
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch(`${BACKEND}/report`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          post_id: postId || null,
+          reported_user_id: reportedUserId || null,
+          reason,
+          details: details.trim() || null,
+        }),
       })
-      if (error) throw error
+      if (!res.ok) throw new Error()
       toast.success(t('report.success'))
       onClose()
     } catch (e) {
