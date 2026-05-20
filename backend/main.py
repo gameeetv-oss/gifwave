@@ -434,10 +434,23 @@ LANG_NAMES = {
     "ja": ("Japonca", "Japanese"),
     "ko": ("Korece", "Korean"),
     "zh-cn": ("Çince", "Chinese"),
+    "zh": ("Çince", "Chinese"),
     "nl": ("Hollandaca", "Dutch"),
     "pl": ("Lehçe", "Polish"),
     "sv": ("İsveççe", "Swedish"),
     "hi": ("Hintçe", "Hindi"),
+    "id": ("Endonezce", "Indonesian"),
+    "fi": ("Fince", "Finnish"),
+    "no": ("Norveççe", "Norwegian"),
+    "da": ("Danimarkaca", "Danish"),
+    "cs": ("Çekçe", "Czech"),
+    "hu": ("Macarca", "Hungarian"),
+    "ro": ("Romence", "Romanian"),
+    "uk": ("Ukraynaca", "Ukrainian"),
+    "el": ("Yunanca", "Greek"),
+    "he": ("İbranice", "Hebrew"),
+    "th": ("Tayca", "Thai"),
+    "vi": ("Vietnamca", "Vietnamese"),
 }
 
 _translate_cache: dict = {}
@@ -454,19 +467,25 @@ async def translate_text(text: str = Query(...), target: str = Query("tr")):
         return _translate_cache[cache_key]
 
     try:
-        from langdetect import detect
+        from langdetect import detect, DetectorFactory
+        DetectorFactory.seed = 0  # deterministic results
         source = detect(text)
+        # langdetect misdetects short Turkish text as other languages;
+        # if text is very short (< 20 chars) and target is the detected lang, trust MyMemory instead
+        if len(text) < 20 and source not in ("en", "tr", "de", "fr", "es", "ar", "ru", "ja", "ko"):
+            source = "und"  # undetermined — let MyMemory auto-detect
     except Exception:
-        source = "en"
+        source = "und"
 
-    if source == target or source.split("-")[0] == target.split("-")[0]:
+    if source != "und" and (source == target or source.split("-")[0] == target.split("-")[0]):
         return {"translated": text, "source": source, "same_language": True}
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
+            langpair = f"{source}|{target}" if source != "und" else f"autodetect|{target}"
             resp = await client.get(
                 "https://api.mymemory.translated.net/get",
-                params={"q": text, "langpair": f"{source}|{target}", "de": "gameeetv@gmail.com"}
+                params={"q": text, "langpair": langpair, "de": "gameeetv@gmail.com"}
             )
             data = resp.json()
             translated = data["responseData"]["translatedText"]

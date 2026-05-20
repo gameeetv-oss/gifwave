@@ -79,7 +79,7 @@ export default function Feed({ mode = 'all' }) {
       setHasMore(data.length === PAGE_SIZE)
       if (data.length === PAGE_SIZE) pageRef.current = pageNum + 1
     } catch (err) {
-      console.error('Feed error:', err)
+      // silent fail — feed pagination errors don't need user-facing error
     } finally {
       loadingRef.current = false
       setLoading(false)

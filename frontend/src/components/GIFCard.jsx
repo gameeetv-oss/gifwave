@@ -11,7 +11,7 @@ import ReportModal from './ReportModal'
 import { playGlobalAudio, stopGlobalAudio, getCurrentUrl, isPlaying } from '../lib/globalAudio'
 import { useTranslation } from 'react-i18next'
 
-const BACKEND = 'https://gifwave-backend.onrender.com'
+const BACKEND = import.meta.env.VITE_BACKEND_URL || 'https://gifwave-backend.onrender.com'
 
 const isMobile = typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0
 
@@ -225,10 +225,12 @@ export default function GIFCard({ post, onDelete }) {
 
   async function saveEdit() {
     setSaving(true)
-    const { error } = await supabase.from('posts')
+    const { data: updated, error } = await supabase.from('posts')
       .update({ caption: editCaption, text_overlay: editOverlay, show_overlay: showOverlay })
       .eq('id', post.id)
-    if (!error) {
+      .select('id')
+      .single()
+    if (!error && updated) {
       setCurrentPost(p => ({ ...p, caption: editCaption, text_overlay: editOverlay, show_overlay: showOverlay }))
       setEditMode(false)
       toast.success(t('gifcard.postUpdated'))

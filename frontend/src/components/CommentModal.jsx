@@ -4,13 +4,15 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useBlock } from '../context/BlockContext'
 import { usePresence } from '../context/PresenceContext'
+import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
 
 export default function CommentModal({ post, onClose }) {
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
+  const navigate = useNavigate()
   const { allBlockedIds } = useBlock()
   const { onlineUsers } = usePresence()
   const { t } = useTranslation()
@@ -59,12 +61,19 @@ export default function CommentModal({ post, onClose }) {
   async function loadReactions() {
     const { data } = await supabase
       .from('reactions')
-      .select('*, profiles!reactions_user_id_fkey(username, display_name, avatar_url)')
+      .select('*')
       .eq('post_id', post.id)
       .order('created_at', { ascending: true })
-    setReactions(data || [])
+    const rows = data || []
+    if (rows.length > 0) {
+      const ids = [...new Set(rows.map(r => r.user_id))]
+      const { data: profs } = await supabase.from('profiles').select('id,username,display_name,avatar_url').in('id', ids)
+      const profMap = Object.fromEntries((profs || []).map(p => [p.id, p]))
+      rows.forEach(r => { r.profiles = profMap[r.user_id] || null })
+    }
+    setReactions(rows)
     if (user) {
-      const mine = (data || []).find(r => r.user_id === user.id)
+      const mine = rows.find(r => r.user_id === user.id)
       setMyReaction(mine || null)
     }
   }
@@ -82,30 +91,42 @@ export default function CommentModal({ post, onClose }) {
 
   async function toggleReaction(gifUrl, gifPreview) {
     if (!user) { toast.error(t('reactions.loginRequired')); return }
-    if (myReaction) {
-      await supabase.from('reactions').delete().eq('id', myReaction.id)
-      setMyReaction(null)
-      setReactions(rs => rs.filter(r => r.id !== myReaction.id))
-      if (gifUrl === myReaction.gif_url) {
-        setShowReactionPicker(false)
-        setReactionResults([])
-        setReactionQuery('')
-        return
+    try {
+      // always delete any existing DB reaction first (handles stale state)
+      const { data: existingArr } = await supabase
+        .from('reactions').select('id,gif_url').eq('post_id', post.id).eq('user_id', user.id)
+      const existing = existingArr?.[0] || myReaction || reactions.find(r => r.user_id === user.id)
+      if (existing) {
+        await supabase.from('reactions').delete().eq('id', existing.id)
+        setMyReaction(null)
+        setReactions(rs => rs.filter(r => r.id !== existing.id))
+        if (gifUrl === existing.gif_url) {
+          setShowReactionPicker(false)
+          setReactionResults([])
+          setReactionQuery('')
+          return
+        }
       }
+      const { data, error } = await supabase.from('reactions').insert({
+        post_id: post.id,
+        user_id: user.id,
+        gif_url: gifUrl,
+        gif_preview: gifPreview || gifUrl
+      }).select('*').single()
+      if (error) throw error
+      const newReaction = {
+        ...data,
+        profiles: { username: profile?.username, display_name: profile?.display_name, avatar_url: profile?.avatar_url }
+      }
+      setMyReaction(newReaction)
+      setReactions(rs => [...rs, newReaction])
+    } catch (err) {
+      toast.error('Tepki eklenemedi')
+    } finally {
+      setShowReactionPicker(false)
+      setReactionResults([])
+      setReactionQuery('')
     }
-    const { data, error } = await supabase.from('reactions').insert({
-      post_id: post.id,
-      user_id: user.id,
-      gif_url: gifUrl,
-      gif_preview: gifPreview || gifUrl
-    }).select('*, profiles!reactions_user_id_fkey(username, display_name, avatar_url)').single()
-    if (!error && data) {
-      setMyReaction(data)
-      setReactions(rs => [...rs, data])
-    }
-    setShowReactionPicker(false)
-    setReactionResults([])
-    setReactionQuery('')
   }
 
   const isPostOwner = user?.id === post.user_id
@@ -351,11 +372,22 @@ export default function CommentModal({ post, onClose }) {
             {reactions.map(r => (
               <button
                 key={r.id}
-                onClick={() => user && toggleReaction(r.gif_url, r.gif_preview)}
-                title={r.profiles?.display_name || r.profiles?.username}
+                onClick={() => {
+                  if (r.user_id === user?.id) {
+                    toggleReaction(r.gif_url, r.gif_preview)
+                  } else if (r.profiles?.username) {
+                    onClose(count)
+                    navigate(`/profile/${r.profiles.username}`)
+                  }
+                }}
                 className={`relative flex-shrink-0 rounded-lg overflow-hidden transition-all active:scale-90 ${r.user_id === user?.id ? 'ring-2 ring-brand-400' : 'opacity-80 hover:opacity-100'}`}
-                style={{ width: 60, height: 60 }}>
-                <img src={r.gif_preview || r.gif_url} alt="reaction" className="w-full h-full object-cover" />
+                style={{ width: 64, height: 72 }}>
+                <img src={r.gif_preview || r.gif_url} alt="reaction" className="w-full object-cover" style={{ height: 52 }} />
+                <div className="w-full bg-black/70 text-center px-0.5" style={{ height: 20 }}>
+                  <span className="text-white leading-none block truncate" style={{ fontSize: 9 }}>
+                    {r.profiles?.display_name || r.profiles?.username || '?'}
+                  </span>
+                </div>
               </button>
             ))}
             {user && (
@@ -372,7 +404,7 @@ export default function CommentModal({ post, onClose }) {
 
         {/* Reaction GIF picker */}
         {showReactionPicker && (
-          <div className="px-4 pt-3 pb-2 space-y-2 border-b border-[#2a2a3f]">
+          <div className="px-4 pt-3 pb-2 space-y-2 border-b border-[#2a2a3f]" onClick={e => e.stopPropagation()}>
             <div className="flex gap-2">
               <input
                 className="input flex-1 text-sm py-1.5"
@@ -393,7 +425,7 @@ export default function CommentModal({ post, onClose }) {
                     key={gif.id}
                     src={gif.preview}
                     alt=""
-                    onClick={() => toggleReaction(gif.url, gif.preview)}
+                    onClick={(e) => { e.stopPropagation(); toggleReaction(gif.url, gif.preview) }}
                     className="w-full h-16 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
                   />
                 ))}
