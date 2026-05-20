@@ -25,7 +25,7 @@ export default function Register() {
     let age = today.getFullYear() - birth.getFullYear()
     const m = today.getMonth() - birth.getMonth()
     if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--
-    if (age < 13) {
+    if (age < 18) {
       toast.error(t('auth.ageTooYoung'))
       return
     }
@@ -92,7 +92,7 @@ export default function Register() {
             <div>
               <label className="text-sm text-gray-400 mb-1.5 block">{t('auth.birthDate')}</label>
               <input className="input" type="date" value={birthDate}
-                max={new Date(new Date().setFullYear(new Date().getFullYear() - 13)).toISOString().split('T')[0]}
+                max={new Date(new Date().setFullYear(new Date().getFullYear() - 18)).toISOString().split('T')[0]}
                 onChange={e => setBirthDate(e.target.value)} required />
               <p className="text-xs text-gray-600 mt-1">{t('auth.ageWarning')}</p>
             </div>
