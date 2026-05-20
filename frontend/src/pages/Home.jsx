@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import Feed from '../components/Feed'
+import { useTranslation } from 'react-i18next'
 
 export default function Home() {
+  const { t } = useTranslation()
   const [tab, setTab] = useState('all')
 
   return (
@@ -15,7 +17,7 @@ export default function Home() {
               tab === 'following' ? 'text-white border-b-2 border-white' : 'text-white/50 hover:text-white/80'
             }`}
           >
-            Takip Ettiklerim
+            {t('home.following')}
           </button>
           <button
             onClick={() => setTab('all')}
@@ -23,7 +25,7 @@ export default function Home() {
               tab === 'all' ? 'text-white border-b-2 border-white' : 'text-white/50 hover:text-white/80'
             }`}
           >
-            Keşfet
+            {t('home.forYou')}
           </button>
         </div>
       </div>

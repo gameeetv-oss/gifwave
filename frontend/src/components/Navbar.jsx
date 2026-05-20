@@ -2,12 +2,14 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { Home, Compass, Plus, User, MessageSquare, Crown } from 'lucide-react'
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabase'
 import UploadModal from './UploadModal'
 import Premium from '../pages/Premium'
 
 export default function Navbar() {
   const { user, profile, signOut, isPremium } = useAuth()
+  const { t } = useTranslation()
   const location = useLocation()
   const navigate = useNavigate()
   const [unread, setUnread] = useState(0)
@@ -44,8 +46,8 @@ export default function Navbar() {
   if (!user) {
     return (
       <nav className="fixed bottom-0 inset-x-0 z-50 bg-[#0a0a14]/95 backdrop-blur border-t border-[#2a2a3f] h-16 flex items-center justify-around px-4">
-        <Link to="/login" className="btn-ghost text-sm">Giriş</Link>
-        <Link to="/register" className="btn-primary text-sm">Kayıt Ol</Link>
+        <Link to="/login" className="btn-ghost text-sm">{t('auth.login')}</Link>
+        <Link to="/register" className="btn-primary text-sm">{t('auth.register')}</Link>
       </nav>
     )
   }
@@ -55,12 +57,12 @@ export default function Navbar() {
       <nav className="fixed bottom-0 inset-x-0 z-50 bg-[#0a0a14]/95 backdrop-blur border-t border-[#2a2a3f] h-16 flex items-center justify-around px-2">
         <Link to="/" className={`flex flex-col items-center gap-0.5 px-4 py-2 rounded-xl transition-all ${isActive('/') ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}>
           <Home className="w-6 h-6" />
-          <span className="text-[10px]">Ana Sayfa</span>
+          <span className="text-[10px]">{t('nav.home')}</span>
         </Link>
 
         <Link to="/explore" className={`flex flex-col items-center gap-0.5 px-4 py-2 rounded-xl transition-all ${isActive('/explore') ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}>
           <Compass className="w-6 h-6" />
-          <span className="text-[10px]">Keşfet</span>
+          <span className="text-[10px]">{t('nav.explore')}</span>
         </Link>
 
         <button
@@ -73,7 +75,7 @@ export default function Navbar() {
         <div className="relative">
           <Link to="/inbox" className={`flex flex-col items-center gap-0.5 px-4 py-2 rounded-xl transition-all ${isActive('/inbox') ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}>
             <MessageSquare className="w-6 h-6" />
-            <span className="text-[10px]">Gelen Kutusu</span>
+            <span className="text-[10px]">{t('nav.messages')}</span>
           </Link>
           {(unread + unreadDMs) > 0 && (
             <span className="absolute top-1 right-2 bg-red-500 text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center font-bold">{(unread + unreadDMs) > 9 ? '9+' : unread + unreadDMs}</span>
@@ -88,7 +90,7 @@ export default function Navbar() {
 
         <Link to={myProfileLink} className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl transition-all ${isActive('/profile') ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}>
           <User className="w-6 h-6" />
-          <span className="text-[10px]">Profil</span>
+          <span className="text-[10px]">{t('nav.profile', 'Profil')}</span>
         </Link>
       </nav>
 

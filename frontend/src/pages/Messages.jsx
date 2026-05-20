@@ -6,8 +6,8 @@ import { usePresence } from '../context/PresenceContext'
 import { useBlock } from '../context/BlockContext'
 import { Send, Loader2, ArrowLeft, Eye, EyeOff, BadgeCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useTranslation } from 'react-i18next'
 
-// ✓ / ✓✓ bileşeni
 function Ticks({ msg, isPartnerOnline, partnerAllowsReceipts }) {
   const isRead = msg.read && partnerAllowsReceipts !== false
   if (isRead) return <span className="text-blue-300 text-xs">✓✓</span>
@@ -18,12 +18,13 @@ function Ticks({ msg, isPartnerOnline, partnerAllowsReceipts }) {
 export default function Messages() {
   const { userId } = useParams()
   const { user } = useAuth()
+  const { t } = useTranslation()
   const { onlineUsers } = usePresence()
   const { blockedIds, blockedByIds, allBlockedIds } = useBlock()
   const navigate = useNavigate()
 
   const [conversations, setConversations] = useState([])
-  const [activeConv, setActiveConv] = useState(null) // { profile, messages }
+  const [activeConv, setActiveConv] = useState(null)
   const [partnerSettings, setPartnerSettings] = useState({ show_read_receipts: true })
   const [mySettings, setMySettings] = useState({ show_read_receipts: true })
   const [showReceiptsMenu, setShowReceiptsMenu] = useState(false)
@@ -65,7 +66,7 @@ export default function Messages() {
     setMySettings({ show_read_receipts: newVal })
     myReceiptsRef.current = newVal
     await supabase.from('user_settings').upsert({ user_id: user.id, show_read_receipts: newVal })
-    toast.success(newVal ? 'Okundu bilgisi açıldı' : 'Okundu bilgisi kapatıldı')
+    toast.success(newVal ? t('messages.readReceiptsEnabled') : t('messages.readReceiptsDisabled'))
     setShowReceiptsMenu(false)
   }
 
@@ -106,17 +107,14 @@ export default function Messages() {
       supabase.from('user_settings').select('show_read_receipts').eq('user_id', otherUserId).maybeSingle(),
     ])
 
-    if (!profRes.data) { toast.error('Kullanıcı bulunamadı'); return }
+    if (!profRes.data) { toast.error(t('messages.userNotFound')); return }
     setActiveConv({ profile: profRes.data, messages: msgsRes.data || [] })
     setPartnerSettings({ show_read_receipts: settRes.data?.show_read_receipts ?? true })
-    // Konuşma listesindeki unread badge'ini sıfırla
     setConversations(cs => cs.map(c => c.profile?.id === otherUserId ? { ...c, unread: 0 } : c))
 
-    // Gelen mesajları her zaman okundu yap (badge temizlenmesi için)
     await supabase.from('messages').update({ read: true })
       .eq('sender_id', otherUserId).eq('receiver_id', user.id).eq('read', false)
 
-    // Realtime: yeni mesaj + read güncellemesi
     if (channelRef.current) supabase.removeChannel(channelRef.current)
     channelRef.current = supabase
       .channel(`dm-${[user.id, otherUserId].sort().join('-')}`)
@@ -126,7 +124,6 @@ export default function Messages() {
       }, async (payload) => {
         if (payload.new.sender_id !== otherUserId) return
         setActiveConv(c => c ? { ...c, messages: [...c.messages, payload.new] } : c)
-        // Konuşma açıkken gelen mesajı her zaman okundu yap
         await supabase.from('messages').update({ read: true }).eq('id', payload.new.id)
       })
       .on('postgres_changes', {
@@ -156,13 +153,12 @@ export default function Messages() {
     if (!error) {
       setActiveConv(c => ({ ...c, messages: [...c.messages, data] }))
       setText('')
-      // DM bildirimi (karşı taraf offline ise)
       if (!onlineUsers.has(activeConv.profile.id)) {
         supabase.from('notifications').insert({
           user_id: activeConv.profile.id, type: 'dm', from_user_id: user.id
         })
       }
-    } else toast.error('Mesaj gönderilemedi')
+    } else toast.error(t('messages.messageFailed'))
     setSending(false)
   }
 
@@ -170,7 +166,7 @@ export default function Messages() {
   const isConvBlocked = activeConv ? allBlockedIds.has(activeConv.profile.id) : false
   const iBlockedThem = activeConv ? blockedIds.has(activeConv.profile.id) : false
 
-  if (!user) return <div className="flex justify-center py-20 text-gray-500">Giriş yapman lazım.</div>
+  if (!user) return <div className="flex justify-center py-20 text-gray-500">{t('messages.loginRequired')}</div>
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6">
@@ -180,12 +176,12 @@ export default function Messages() {
         {/* Sol: Konuşmalar */}
         <div className={`w-full md:w-72 border-r border-[#2a2a3f] flex flex-col flex-shrink-0 ${activeConv ? 'hidden md:flex' : 'flex'}`}>
           <div className="px-4 py-3 border-b border-[#2a2a3f]">
-            <h2 className="font-semibold">Mesajlar</h2>
+            <h2 className="font-semibold">{t('messages.title')}</h2>
           </div>
           <div className="flex-1 overflow-y-auto">
             {loading && <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-brand-400" /></div>}
             {!loading && conversations.length === 0 && (
-              <p className="text-gray-500 text-sm text-center py-8">Henüz mesajın yok.</p>
+              <p className="text-gray-500 text-sm text-center py-8">{t('messages.noMessages')}</p>
             )}
             {conversations.map(conv => {
               const isOnline = onlineUsers.has(conv.profile?.id)
@@ -245,7 +241,7 @@ export default function Messages() {
                     </p>
                   <p className="text-xs">
                     {isPartnerOnline
-                      ? <span className="text-green-400">● Aktif</span>
+                      ? <span className="text-green-400">{t('messages.active')}</span>
                       : <span className="text-gray-500">@{activeConv.profile.username}</span>}
                   </p>
                 </div>
@@ -255,20 +251,20 @@ export default function Messages() {
               <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
                 <button onClick={() => setShowReceiptsMenu(m => !m)}
                   className="text-gray-500 hover:text-white p-1.5 rounded-lg hover:bg-white/5 transition-all"
-                  title="Okundu bilgisi">
+                  title={t('messages.readReceipts')}>
                   {mySettings.show_read_receipts ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                 </button>
                 {showReceiptsMenu && (
                   <div className="absolute right-0 top-9 bg-[#1a1a2e] border border-[#3a3a5c] rounded-xl shadow-xl z-30 w-56 p-3">
-                    <p className="text-xs text-gray-500 mb-2 font-semibold uppercase tracking-wide">Okundu Bilgisi</p>
+                    <p className="text-xs text-gray-500 mb-2 font-semibold uppercase tracking-wide">{t('messages.readReceipts')}</p>
                     <div className="flex items-center justify-between">
-                      <p className="text-sm text-gray-300">{mySettings.show_read_receipts ? 'Açık' : 'Kapalı'}</p>
+                      <p className="text-sm text-gray-300">{mySettings.show_read_receipts ? t('messages.readReceiptsOn') : t('messages.readReceiptsOff')}</p>
                       <button onClick={toggleReadReceipts}
                         className={`relative w-10 h-5 rounded-full transition-colors ${mySettings.show_read_receipts ? 'bg-brand-500' : 'bg-gray-600'}`}>
                         <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform shadow ${mySettings.show_read_receipts ? 'translate-x-5' : 'translate-x-0.5'}`} />
                       </button>
                     </div>
-                    <p className="text-xs text-gray-600 mt-2">Kapalıyken kimse mesajlarını okuyup okumadığını göremez.</p>
+                    <p className="text-xs text-gray-600 mt-2">{t('messages.readReceiptsDesc')}</p>
                   </div>
                 )}
               </div>
@@ -307,14 +303,14 @@ export default function Messages() {
             {isConvBlocked ? (
               <div className="px-4 py-4 border-t border-[#2a2a3f] text-center text-sm text-gray-500">
                 {iBlockedThem
-                  ? <span>Bu kullanıcıyı engellediniz. Mesaj gönderemezsiniz.</span>
-                  : <span>Bu kullanıcı tarafından engellendiniz.</span>}
+                  ? <span>{t('messages.blockedByMe')}</span>
+                  : <span>{t('messages.blockedByThem')}</span>}
               </div>
             ) : (
               <form onSubmit={sendMessage} className="px-4 py-3 border-t border-[#2a2a3f] flex gap-2">
                 <input
                   className="input flex-1 text-sm py-2"
-                  placeholder="Mesaj yaz..."
+                  placeholder={t('messages.placeholder')}
                   value={text}
                   onChange={e => setText(e.target.value)}
                   disabled={sending}
@@ -328,7 +324,7 @@ export default function Messages() {
         ) : (
           <div className="flex-1 hidden md:flex items-center justify-center text-gray-500 flex-col gap-2">
             <p className="text-3xl">💬</p>
-            <p className="text-sm">Bir konuşma seç</p>
+            <p className="text-sm">{t('messages.selectConversation')}</p>
           </div>
         )}
       </div>

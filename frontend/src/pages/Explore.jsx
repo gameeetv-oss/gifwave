@@ -5,11 +5,13 @@ import { useAuth } from '../context/AuthContext'
 import { Link, useSearchParams } from 'react-router-dom'
 import GIFCard from '../components/GIFCard'
 import toast from 'react-hot-toast'
+import { useTranslation } from 'react-i18next'
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
 
 export default function Explore() {
   const { user } = useAuth()
+  const { t } = useTranslation()
   const [searchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('tag') ? '#' + searchParams.get('tag') : '')
   const [tab, setTab] = useState('trending')
@@ -21,21 +23,18 @@ export default function Explore() {
   const [loading, setLoading] = useState(false)
   const [giphyLoading, setGiphyLoading] = useState(false)
 
-  // Trending GIF sayfalama
   const [trendingPage, setTrendingPage] = useState(0)
-  const [trendingCursors, setTrendingCursors] = useState(['']) // cursors[i] = pos for page i
+  const [trendingCursors, setTrendingCursors] = useState([''])
   const [trendingNext, setTrendingNext] = useState('')
   const [trendingPageLoading, setTrendingPageLoading] = useState(false)
 
-  // Arama GIF sayfalama
   const [searchGifPage, setSearchGifPage] = useState(0)
   const [searchGifCursors, setSearchGifCursors] = useState([''])
   const [searchGifNext, setSearchGifNext] = useState('')
   const [searchGifLoading, setSearchGifLoading] = useState(false)
   const lastSearchQuery = useRef('')
-  const [followStatuses, setFollowStatuses] = useState({}) // userId -> null|'pending'|'accepted'
+  const [followStatuses, setFollowStatuses] = useState({})
 
-  // Ekle ve Düzenle modali
   const [editGif, setEditGif] = useState(null)
   const [editCaption, setEditCaption] = useState('')
   const [editOverlay, setEditOverlay] = useState('')
@@ -56,20 +55,37 @@ export default function Explore() {
   }, [])
 
   async function loadTrending() {
+    const cached = localStorage.getItem('gifwave_trending_giphy')
+    if (cached) {
+      try {
+        const { gifs, next } = JSON.parse(cached)
+        setTrendingGiphy(gifs || [])
+        setTrendingNext(next || '')
+      } catch {}
+    }
+
     setLoading(true)
-    const [postsRes, giphyRes] = await Promise.all([
-      supabase.from('posts')
-        .select('*, profiles!fk_posts_profiles(username, display_name, avatar_url, is_verified, is_premium, premium_until)')
-        .order('likes_count', { ascending: false })
-        .limit(10),
-      fetch(`${BACKEND_URL}/giphy/trending?limit=24`).then(r => r.json()).catch(() => ({ gifs: [], next: '' }))
-    ])
+    const postsRes = await supabase.from('posts')
+      .select('*, profiles!fk_posts_profiles(username, display_name, avatar_url, is_verified, is_premium, premium_until)')
+      .order('likes_count', { ascending: false })
+      .limit(10)
     setTrendingPosts(postsRes.data || [])
-    setTrendingGiphy(giphyRes.gifs || [])
-    setTrendingNext(giphyRes.next || '')
-    setTrendingPage(0)
-    setTrendingCursors([''])
     setLoading(false)
+
+    fetch(`${BACKEND_URL}/giphy/trending?limit=24`)
+      .then(r => r.json())
+      .then(giphyRes => {
+        const gifs = giphyRes.gifs || []
+        const next = giphyRes.next || ''
+        setTrendingGiphy(gifs)
+        setTrendingNext(next)
+        setTrendingPage(0)
+        setTrendingCursors([''])
+        if (gifs.length > 0) {
+          localStorage.setItem('gifwave_trending_giphy', JSON.stringify({ gifs, next }))
+        }
+      })
+      .catch(() => {})
   }
 
   async function goTrendingPage(dir) {
@@ -80,13 +96,11 @@ export default function Explore() {
 
     let pos = ''
     if (dir === 1) {
-      // İleri: trendingNext'i kullan, cursors listesine ekle
       pos = trendingNext
       const newCursors = [...trendingCursors]
       if (!newCursors[newPage]) newCursors[newPage] = pos
       setTrendingCursors(newCursors)
     } else {
-      // Geri: cursors'dan al
       pos = trendingCursors[newPage] || ''
     }
 
@@ -97,7 +111,6 @@ export default function Explore() {
     setTrendingPage(newPage)
     setTrendingPageLoading(false)
 
-    // GIF grid'e scroll et
     gifGridRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
@@ -121,7 +134,6 @@ export default function Explore() {
     setSearchGifNext('')
     lastSearchQuery.current = trimmed
 
-    // Platform araması
     if (trimmed.startsWith('#')) {
       const tag = trimmed.slice(1)
       const { data } = await supabase
@@ -133,7 +145,6 @@ export default function Explore() {
     } else {
       const { data } = await supabase.from('profiles').select('*').ilike('username', `%${trimmed}%`).limit(20)
       setSearchResults(data || [])
-      // Follow statülerini yükle
       if (user && data?.length > 0) {
         const ids = data.map(u => u.id).filter(id => id !== user.id)
         if (ids.length > 0) {
@@ -147,7 +158,6 @@ export default function Explore() {
     }
     setLoading(false)
 
-    // GIPHY araması
     const gifQ = trimmed.replace(/^#/, '')
     fetch(`${BACKEND_URL}/giphy/search?q=${encodeURIComponent(gifQ)}&limit=20`)
       .then(r => r.json())
@@ -185,7 +195,7 @@ export default function Explore() {
   }
 
   async function repostGiphy(gif) {
-    if (!user) { toast.error('Giriş yap'); return }
+    if (!user) { toast.error(t('explore.loginRequired')); return }
     const { error } = await supabase.from('posts').insert({
       user_id: user.id,
       gif_url: gif.url,
@@ -195,12 +205,12 @@ export default function Explore() {
       likes_count: 0,
       comments_count: 0
     })
-    if (!error) toast.success('GIF profiline eklendi!')
-    else toast.error('Hata oluştu')
+    if (!error) toast.success(t('explore.gifAdded'))
+    else toast.error(t('explore.errorOccurred'))
   }
 
   function openEditModal(gif) {
-    if (!user) { toast.error('Giriş yap'); return }
+    if (!user) { toast.error(t('explore.loginRequired')); return }
     setEditGif(gif)
     setEditCaption(gif.title || '')
     setEditOverlay('')
@@ -216,20 +226,20 @@ export default function Explore() {
     try {
       const u = new URL(trimmed)
       const isYT = u.hostname.includes('youtube.com') || u.hostname === 'youtu.be' || u.hostname.includes('music.youtube.com')
-      if (!isYT) { toast.error('Geçersiz YouTube linki'); return }
-    } catch { toast.error('Geçersiz URL'); return }
+      if (!isYT) { toast.error(t('explore.invalidYoutubeLink')); return }
+    } catch { toast.error(t('explore.invalidUrl')); return }
     setEditMusicUploading(true)
     try {
       const res = await fetch(`${BACKEND_URL}/music/extract?url=${encodeURIComponent(trimmed)}`, { method: 'POST' })
       if (!res.ok) throw new Error('extract_failed')
       const data = await res.json()
       setEditMusicUrl(data.url)
-      setEditMusicFileName(data.title || 'YouTube Müziği')
-      toast.success('Müzik eklendi!')
+      setEditMusicFileName(data.title || t('gifcard.ytTitle'))
+      toast.success(t('explore.musicAdded'))
     } catch {
       setEditMusicUrl(trimmed)
-      setEditMusicFileName('YouTube Müziği')
-      toast('Müzik eklendi (masaüstünde çalar)', { icon: '🎵' })
+      setEditMusicFileName(t('gifcard.ytTitle'))
+      toast(t('explore.musicAddedDesktop'), { icon: '🎵' })
     } finally {
       setEditMusicUploading(false)
       setEditYtInput('')
@@ -239,17 +249,17 @@ export default function Explore() {
   async function handleEditMusicSelect(e) {
     const file = e.target.files[0]
     if (!file) return
-    if (!file.type.startsWith('audio/')) { toast.error('Ses dosyası seçmelisin (mp3, ogg, wav...)'); return }
-    if (file.size > 15 * 1024 * 1024) { toast.error('Maks 15MB'); return }
+    if (!file.type.startsWith('audio/')) { toast.error(t('explore.audioFileRequired')); return }
+    if (file.size > 15 * 1024 * 1024) { toast.error(t('explore.maxFileSize')); return }
     setEditMusicUploading(true)
     const path = `${user.id}/${Date.now()}_${file.name}`
     const { error } = await supabase.storage.from('music').upload(path, file, { contentType: file.type })
-    if (error) { toast.error('Müzik yükleme hatası'); setEditMusicUploading(false); return }
+    if (error) { toast.error(t('explore.musicUploadError')); setEditMusicUploading(false); return }
     const { data: { publicUrl } } = supabase.storage.from('music').getPublicUrl(path)
     setEditMusicUrl(publicUrl)
     setEditMusicFileName(file.name)
     setEditMusicUploading(false)
-    toast.success('Müzik yüklendi!')
+    toast.success(t('explore.musicAdded'))
   }
 
   async function saveEditPost() {
@@ -269,15 +279,15 @@ export default function Explore() {
     })
     setEditSaving(false)
     if (!error) {
-      toast.success('GIF paylaşıldı!')
+      toast.success(t('explore.gifShared'))
       setEditGif(null)
     } else {
-      toast.error('Hata oluştu')
+      toast.error(t('explore.errorOccurred'))
     }
   }
 
   async function toggleFollow(targetId) {
-    if (!user) { toast.error('Giriş yap'); return }
+    if (!user) { toast.error(t('explore.loginRequired')); return }
     const current = followStatuses[targetId]
     if (current === 'accepted' || current === 'pending') {
       await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', targetId)
@@ -302,11 +312,11 @@ export default function Explore() {
             <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-2">
               <button onClick={() => repostGiphy(gif)}
                 className="flex items-center gap-1.5 bg-brand-500 hover:bg-brand-600 text-white text-xs px-3 py-1.5 rounded-lg transition-colors w-full justify-center">
-                <Repeat2 className="w-3.5 h-3.5" /> Ekle
+                <Repeat2 className="w-3.5 h-3.5" /> {t('explore.addToProfile')}
               </button>
               <button onClick={() => openEditModal(gif)}
                 className="flex items-center gap-1.5 bg-[#2a2a4a] hover:bg-[#3a3a5c] border border-[#3a3a5c] text-white text-xs px-3 py-1.5 rounded-lg transition-colors w-full justify-center">
-                <Pencil className="w-3.5 h-3.5" /> Ekle ve Düzenle
+                <Pencil className="w-3.5 h-3.5" /> {t('explore.addAndEdit')}
               </button>
             </div>
           </div>
@@ -320,12 +330,12 @@ export default function Explore() {
       <div className="flex items-center justify-center gap-3 mt-4">
         <button onClick={onPrev} disabled={page === 0 || pgLoading}
           className="flex items-center gap-1 px-4 py-2 rounded-xl bg-[#1a1a2e] border border-[#3a3a5c] text-sm text-gray-300 hover:text-white hover:border-brand-500/50 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
-          <ChevronLeft className="w-4 h-4" /> Önceki
+          <ChevronLeft className="w-4 h-4" /> {t('explore.prev')}
         </button>
-        <span className="text-sm text-gray-500">Sayfa {page + 1}</span>
+        <span className="text-sm text-gray-500">{t('explore.page')} {page + 1}</span>
         <button onClick={onNext} disabled={!hasNext || pgLoading}
           className="flex items-center gap-1 px-4 py-2 rounded-xl bg-[#1a1a2e] border border-[#3a3a5c] text-sm text-gray-300 hover:text-white hover:border-brand-500/50 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
-          {pgLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Sonraki <ChevronRight className="w-4 h-4" /></>}
+          {pgLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>{t('explore.next')} <ChevronRight className="w-4 h-4" /></>}
         </button>
       </div>
     )
@@ -339,7 +349,7 @@ export default function Explore() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4" onClick={() => setEditGif(null)}>
           <div className="bg-[#1a1a2e] border border-[#3a3a5c] rounded-2xl w-full max-w-md p-5 space-y-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <h2 className="font-bold text-white text-lg">GIF Düzenle & Paylaş</h2>
+              <h2 className="font-bold text-white text-lg">{t('explore.editAndShare')}</h2>
               <button onClick={() => setEditGif(null)} className="text-gray-500 hover:text-white"><X className="w-5 h-5" /></button>
             </div>
             <div className="relative rounded-xl overflow-hidden bg-black/30">
@@ -352,14 +362,14 @@ export default function Explore() {
                 </div>
               )}
             </div>
-            <input className="input text-sm" placeholder="Açıklama (opsiyonel)..."
+            <input className="input text-sm" placeholder={t('explore.captionOptional')}
               value={editCaption} onChange={e => setEditCaption(e.target.value)} />
-            <input className="input text-sm" placeholder="GIF üzerine yazı (meme tarzı)..."
+            <input className="input text-sm" placeholder={t('explore.memeText')}
               value={editOverlay} onChange={e => setEditOverlay(e.target.value)} />
             {editOverlay && (
               <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
                 <input type="checkbox" checked={editShowOverlay} onChange={e => setEditShowOverlay(e.target.checked)} />
-                GIF üzerinde göster
+                {t('explore.showOnGif')}
               </label>
             )}
 
@@ -378,7 +388,7 @@ export default function Explore() {
                 <div className="flex gap-2">
                   <input
                     className="input flex-1 text-sm"
-                    placeholder="YouTube linki yapıştır..."
+                    placeholder={t('explore.ytPlaceholder')}
                     value={editYtInput}
                     onChange={e => setEditYtInput(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && addEditYTMusic()}
@@ -387,18 +397,18 @@ export default function Explore() {
                     disabled={!editYtInput.trim() || editMusicUploading}
                     className="btn-primary px-3 py-2 text-sm flex-shrink-0 flex items-center gap-1.5">
                     {editMusicUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Music className="w-4 h-4" />}
-                    {editMusicUploading ? 'İndiriliyor...' : 'Ekle'}
+                    {editMusicUploading ? t('explore.downloading') : t('explore.add')}
                   </button>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="flex-1 h-px bg-[#2a2a3f]" />
-                  <span className="text-xs text-gray-600">veya</span>
+                  <span className="text-xs text-gray-600">{t('explore.orText')}</span>
                   <div className="flex-1 h-px bg-[#2a2a3f]" />
                 </div>
                 <button type="button" onClick={() => editMusicFileRef.current?.click()} disabled={editMusicUploading}
                   className="w-full flex items-center gap-2 px-3 py-2 bg-[#12121e] border border-dashed border-[#3a3a5c] rounded-xl text-sm text-gray-500 hover:border-brand-500 hover:text-brand-400 transition-colors">
                   <Music className="w-4 h-4" />
-                  MP3 / OGG / WAV dosyası yükle
+                  {t('explore.uploadAudio')}
                 </button>
               </div>
             )}
@@ -406,9 +416,9 @@ export default function Explore() {
             <div className="flex gap-2 pt-1">
               <button onClick={saveEditPost} disabled={editSaving || editMusicUploading}
                 className="btn-primary flex-1 flex items-center justify-center gap-2">
-                {editSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Paylaş
+                {editSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} {t('explore.share')}
               </button>
-              <button onClick={() => setEditGif(null)} className="btn-ghost px-4">İptal</button>
+              <button onClick={() => setEditGif(null)} className="btn-ghost px-4">{t('common.cancel')}</button>
             </div>
           </div>
         </div>
@@ -419,11 +429,11 @@ export default function Explore() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
           <input ref={searchInputRef} className="input pl-9"
-            placeholder="GIF ara, kullanıcı veya #tag..."
+            placeholder={t('explore.placeholder')}
             value={query} onChange={e => setQuery(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSearch()} />
         </div>
-        <button onClick={() => handleSearch()} className="btn-primary px-5">Ara</button>
+        <button onClick={() => handleSearch()} className="btn-primary px-5">{t('explore.search')}</button>
       </div>
 
       {/* Trend tag'ler */}
@@ -443,11 +453,10 @@ export default function Explore() {
       {/* Search sonuçları */}
       {tab === 'search' && (
         <div className="space-y-8">
-          {/* GIPHY sonuçları */}
           {(giphyLoading || giphyResults.length > 0) && (
             <div>
               <h2 className="font-semibold text-gray-300 mb-3 flex items-center gap-2">
-                <Search className="w-4 h-4 text-brand-400" /> GIF Sonuçları
+                <Search className="w-4 h-4 text-brand-400" /> {t('explore.gifResults')}
               </h2>
               {giphyLoading ? (
                 <div className="flex justify-center py-6"><Loader2 className="w-6 h-6 animate-spin text-brand-400" /></div>
@@ -466,13 +475,12 @@ export default function Explore() {
             </div>
           )}
 
-          {/* Platform sonuçları */}
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-brand-400" /></div>
           ) : searchResults.length > 0 && (
             <div>
               <h2 className="font-semibold text-gray-300 mb-3">
-                {isUserSearch ? 'Kullanıcılar' : 'Platform Gönderileri'}
+                {isUserSearch ? t('explore.users') : t('explore.platformPosts')}
               </h2>
               {isUserSearch ? (
                 <div className="space-y-3">
@@ -496,9 +504,9 @@ export default function Explore() {
                               : fs === 'pending' ? 'bg-yellow-500/10 text-yellow-400'
                               : 'btn-primary'
                             }`}>
-                            {fs === 'accepted' ? <><UserMinus className="w-3.5 h-3.5" /> Takip Ediliyor</>
-                              : fs === 'pending' ? <><Clock className="w-3.5 h-3.5" /> İstek Gönderildi</>
-                              : <><UserPlus className="w-3.5 h-3.5" /> Takip Et</>}
+                            {fs === 'accepted' ? <><UserMinus className="w-3.5 h-3.5" /> {t('explore.following')}</>
+                              : fs === 'pending' ? <><Clock className="w-3.5 h-3.5" /> {t('explore.requestSent')}</>
+                              : <><UserPlus className="w-3.5 h-3.5" /> {t('profile.follow')}</>}
                           </button>
                         )}
                       </div>
@@ -529,7 +537,7 @@ export default function Explore() {
               {trendingGiphy.length > 0 && (
                 <div ref={gifGridRef}>
                   <h2 className="font-semibold text-gray-300 mb-3 flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-brand-400" /> Trending GIF'ler
+                    <TrendingUp className="w-4 h-4 text-brand-400" /> {t('explore.trending')}
                   </h2>
                   {trendingPageLoading ? (
                     <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-brand-400" /></div>
@@ -549,7 +557,7 @@ export default function Explore() {
               {trendingPosts.length > 0 && (
                 <div>
                   <h2 className="font-semibold text-gray-300 mb-3 flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-brand-400" /> Popüler Gönderiler
+                    <TrendingUp className="w-4 h-4 text-brand-400" /> {t('explore.popularPosts')}
                   </h2>
                   <div className="space-y-4">
                     {trendingPosts.map(post => (

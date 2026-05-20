@@ -8,6 +8,13 @@
   "android": {
     "backgroundColor": "#0f0f0f"
   },
+  "ios": {
+    "backgroundColor": "#0f0f0f",
+    "contentInset": "automatic",
+    "allowsLinkPreview": false,
+    "scrollEnabled": true,
+    "limitsNavigationsToAppBoundDomains": false
+  },
   "plugins": {
     "AdMob": {
       "appId": "ca-app-pub-4416578432335144~6450136156"

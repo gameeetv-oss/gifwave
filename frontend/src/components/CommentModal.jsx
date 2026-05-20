@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { useBlock } from '../context/BlockContext'
 import { usePresence } from '../context/PresenceContext'
 import toast from 'react-hot-toast'
+import { useTranslation } from 'react-i18next'
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
 
@@ -12,11 +13,12 @@ export default function CommentModal({ post, onClose }) {
   const { user } = useAuth()
   const { allBlockedIds } = useBlock()
   const { onlineUsers } = usePresence()
+  const { t } = useTranslation()
   const [comments, setComments] = useState([])
   const [text, setText] = useState('')
   const [loading, setLoading] = useState(false)
   const [count, setCount] = useState(post.comments_count || 0)
-  const [replyTo, setReplyTo] = useState(null) // { id, username }
+  const [replyTo, setReplyTo] = useState(null)
   const [replyText, setReplyText] = useState('')
   const [replyLoading, setReplyLoading] = useState(false)
   const [myLikes, setMyLikes] = useState(new Set())
@@ -73,7 +75,6 @@ export default function CommentModal({ post, onClose }) {
     setComments(all)
     setCount(all.filter(c => !c.parent_id).length + all.filter(c => c.parent_id).length)
 
-    // kendi beğenilerimi yükle
     if (user && all.length > 0) {
       const ids = all.map(c => c.id)
       const { data: lk } = await supabase.from('comment_likes').select('comment_id').eq('user_id', user.id).in('comment_id', ids)
@@ -89,7 +90,7 @@ export default function CommentModal({ post, onClose }) {
       const res = await fetch(`${BACKEND_URL}/giphy/search?q=${encodeURIComponent(gifQuery)}`)
       const data = await res.json()
       setGifResults(data.gifs || [])
-    } catch { toast.error('GIF arama hatası') }
+    } catch { toast.error(t('comments.gifSearchError')) }
     finally { setGifLoading(false) }
   }
 
@@ -107,7 +108,7 @@ export default function CommentModal({ post, onClose }) {
 
   async function submit(e) {
     e.preventDefault()
-    if (!user) { toast.error('Giriş yapman lazım'); return }
+    if (!user) { toast.error(t('comments.loginRequired')); return }
     if (!text.trim()) return
     setLoading(true)
     const { error } = await supabase.from('comments').insert({
@@ -158,7 +159,7 @@ export default function CommentModal({ post, onClose }) {
   }
 
   async function toggleCommentLike(commentId) {
-    if (!user) { toast.error('Giriş yapman lazım'); return }
+    if (!user) { toast.error(t('comments.loginRequired')); return }
     const isLiked = myLikes.has(commentId)
     if (isLiked) {
       await supabase.from('comment_likes').delete().eq('user_id', user.id).eq('comment_id', commentId)
@@ -232,7 +233,7 @@ export default function CommentModal({ post, onClose }) {
               <button
                 onClick={() => setReplyTo(r => r?.id === c.id ? null : { id: c.id, username: c.profiles?.username })}
                 className="text-xs text-gray-600 hover:text-brand-400 transition-colors flex items-center gap-1">
-                <CornerDownRight className="w-3 h-3" /> Yanıtla
+                <CornerDownRight className="w-3 h-3" /> {t('comments.reply')}
               </button>
             )}
             {user?.id === c.user_id && (
@@ -255,7 +256,7 @@ export default function CommentModal({ post, onClose }) {
             <form onSubmit={submitReply} className="flex gap-2 mt-2">
               <input
                 className="input flex-1 text-xs py-1.5"
-                placeholder={`@${replyTo.username} yanıtla...`}
+                placeholder={t('comments.replyPlaceholder', { username: replyTo.username })}
                 value={replyText}
                 onChange={e => setReplyText(e.target.value)}
                 disabled={replyLoading}
@@ -277,14 +278,14 @@ export default function CommentModal({ post, onClose }) {
       <div className="card w-full max-w-lg max-h-[80vh] flex flex-col animate-slide-up"
         onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#2a2a3f]">
-          <h3 className="font-semibold">Yorumlar {count > 0 && <span className="text-brand-400 text-sm">({count})</span>}</h3>
+          <h3 className="font-semibold">{t('comments.title')} {count > 0 && <span className="text-brand-400 text-sm">({count})</span>}</h3>
           <button onClick={() => onClose(count)} className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-white/5">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-          {topComments.length === 0 && <p className="text-gray-500 text-center py-8 text-sm">İlk yorumu sen yap!</p>}
+          {topComments.length === 0 && <p className="text-gray-500 text-center py-8 text-sm">{t('comments.firstComment')}</p>}
           {topComments.map(c => (
             <div key={c.id}>
               <CommentItem c={c} isReply={false} />
@@ -298,8 +299,8 @@ export default function CommentModal({ post, onClose }) {
         {user && !canComment() && (
           <div className="border-t border-[#2a2a3f] px-4 py-3 text-center text-xs text-gray-500">
             {ownerSettings?.who_can_comment === 'none'
-              ? 'Bu gönderiye yorum kapalı'
-              : 'Yorum yapmak için takipçi olman gerekiyor'}
+              ? t('comments.commentsClosed')
+              : t('comments.followRequired')}
           </div>
         )}
         {canComment() && (
@@ -308,11 +309,11 @@ export default function CommentModal({ post, onClose }) {
             {showGifPicker && (
               <div className="px-4 pt-3 pb-2 space-y-2">
                 <div className="flex gap-2">
-                  <input className="input flex-1 text-sm py-1.5" placeholder="GIF ara..."
+                  <input className="input flex-1 text-sm py-1.5" placeholder={t('comments.searchGif')}
                     value={gifQuery} onChange={e => setGifQuery(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && searchGif()} autoFocus />
                   <button onClick={searchGif} disabled={gifLoading} className="btn-primary px-3 py-1.5">
-                    {gifLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Ara'}
+                    {gifLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : t('comments.search')}
                   </button>
                 </div>
                 {gifResults.length > 0 && (
@@ -330,7 +331,7 @@ export default function CommentModal({ post, onClose }) {
                 className={`p-2 rounded-xl transition-colors flex-shrink-0 ${showGifPicker ? 'text-brand-400 bg-brand-500/10' : 'text-gray-500 hover:text-brand-400 hover:bg-brand-500/10'}`}>
                 <Film className="w-5 h-5" />
               </button>
-              <input className="input flex-1 text-sm py-2" placeholder="Yorum yaz..."
+              <input className="input flex-1 text-sm py-2" placeholder={t('comments.placeholder')}
                 value={text} onChange={e => setText(e.target.value)} disabled={loading} />
               <button type="submit" disabled={loading || !text.trim()} className="btn-primary px-3 py-2">
                 <Send className="w-4 h-4" />

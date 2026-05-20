@@ -2,8 +2,10 @@ import { useState } from 'react'
 import { MessageSquare, Bell } from 'lucide-react'
 import Messages from './Messages'
 import Notifications from './Notifications'
+import { useTranslation } from 'react-i18next'
 
 export default function Inbox() {
+  const { t } = useTranslation()
   const [tab, setTab] = useState('messages')
 
   return (
@@ -17,7 +19,7 @@ export default function Inbox() {
           }`}
         >
           <MessageSquare className="w-4 h-4" />
-          Mesajlar
+          {t('inbox.messages')}
         </button>
         <button
           onClick={() => setTab('notifications')}
@@ -26,7 +28,7 @@ export default function Inbox() {
           }`}
         >
           <Bell className="w-4 h-4" />
-          Bildirimler
+          {t('inbox.notifications')}
         </button>
       </div>
 

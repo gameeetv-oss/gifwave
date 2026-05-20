@@ -4,9 +4,11 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
+import { useTranslation } from 'react-i18next'
 
 export default function FollowModal({ profileId, type, onClose, onCountChange }) {
   const { user, fetchProfile } = useAuth()
+  const { t } = useTranslation()
   const [list, setList] = useState([])
   const [loading, setLoading] = useState(true)
   const [myFollowing, setMyFollowing] = useState(new Set())
@@ -48,7 +50,6 @@ export default function FollowModal({ profileId, type, onClose, onCountChange })
   async function unfollow(targetId, targetUsername) {
     await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', targetId)
 
-    // Sayıları yeniden hesapla
     const [{ count: newFollowers }, { count: myNewFollowing }] = await Promise.all([
       supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', targetId),
       supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', user.id),
@@ -59,7 +60,7 @@ export default function FollowModal({ profileId, type, onClose, onCountChange })
     ])
 
     setMyFollowing(prev => { const s = new Set(prev); s.delete(targetId); return s })
-    toast(`@${targetUsername} takipten çıkıldı`)
+    toast(t('followModal.unfollowed', { username: targetUsername }))
     fetchProfile(user.id)
     onCountChange?.()
   }
@@ -68,7 +69,7 @@ export default function FollowModal({ profileId, type, onClose, onCountChange })
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
       <div className="card w-full max-w-sm max-h-[70vh] flex flex-col animate-slide-up" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#2a2a3f]">
-          <h3 className="font-semibold">{type === 'followers' ? 'Takipçiler' : 'Takip Edilenler'}</h3>
+          <h3 className="font-semibold">{type === 'followers' ? t('followModal.followers') : t('followModal.following')}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-white/5">
             <X className="w-5 h-5" />
           </button>
@@ -82,7 +83,7 @@ export default function FollowModal({ profileId, type, onClose, onCountChange })
           )}
           {!loading && list.length === 0 && (
             <p className="text-center text-gray-500 text-sm py-8">
-              {type === 'followers' ? 'Henüz takipçi yok' : 'Henüz takip edilen yok'}
+              {type === 'followers' ? t('followModal.noFollowers') : t('followModal.noFollowing')}
             </p>
           )}
           {list.map(p => (
@@ -107,7 +108,7 @@ export default function FollowModal({ profileId, type, onClose, onCountChange })
                   onClick={() => unfollow(p.id, p.username)}
                   className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-400 hover:bg-red-500/10 px-2.5 py-1.5 rounded-lg transition-all flex-shrink-0"
                 >
-                  <UserMinus className="w-3.5 h-3.5" /> Çıkar
+                  <UserMinus className="w-3.5 h-3.5" /> {t('followModal.unfollow')}
                 </button>
               )}
             </div>

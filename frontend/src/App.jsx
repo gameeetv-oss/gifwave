@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { PresenceProvider } from './context/PresenceContext'
@@ -57,11 +58,21 @@ function AppRoutes() {
   )
 }
 
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
+
+function BackendWarmup() {
+  useEffect(() => {
+    fetch(`${BACKEND_URL}/health`).catch(() => {})
+  }, [])
+  return null
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <PresenceProvider>
         <BlockProvider>
+          <BackendWarmup />
           <AppRoutes />
         </BlockProvider>
       </PresenceProvider>

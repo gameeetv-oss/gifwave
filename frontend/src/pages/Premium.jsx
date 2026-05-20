@@ -4,21 +4,15 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { usePurchases } from '../hooks/usePurchases'
 import toast from 'react-hot-toast'
+import { useTranslation } from 'react-i18next'
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
 const WHOP_LINK = 'https://whop.com/gifwave/gifwave-premium'
 const PRICE_TRY = '49'
 
-const BENEFITS = [
-  { icon: Upload, text: 'Sınırsız günlük yükleme (ücretsiz: 5/gün)' },
-  { icon: Image, text: 'Hareketli profil fotoğrafı (GIF avatar)' },
-  { icon: Star, text: 'Altın Premium rozeti' },
-  { icon: Zap, text: 'Reklamsız deneyim' },
-  { icon: Crown, text: 'Öncelikli destek' },
-]
-
 export default function Premium({ onClose }) {
   const { user, profile, fetchProfile } = useAuth()
+  const { t } = useTranslation()
   const [tab, setTab] = useState('pay')
   const [code, setCode] = useState('')
   const [email, setEmail] = useState('')
@@ -29,16 +23,24 @@ export default function Premium({ onClose }) {
   const isPremium = profile?.is_premium && (!profile?.premium_until || new Date(profile.premium_until) > new Date())
   const price = offering?.availablePackages?.[0]?.product?.priceString || `₺${PRICE_TRY}/ay`
 
+  const BENEFITS = [
+    { icon: Upload, text: t('premium.benefits.unlimitedUpload') },
+    { icon: Image, text: t('premium.benefits.gifAvatar') },
+    { icon: Star, text: t('premium.benefits.badge') },
+    { icon: Zap, text: t('premium.benefits.noAds') },
+    { icon: Crown, text: t('premium.benefits.support') },
+  ]
+
   async function handleNativePurchase() {
     try {
       const result = await purchasePremium()
       if (result) {
         await fetchProfile(user.id)
-        toast.success('Premium aktif! Hoş geldin 👑')
+        toast.success(t('premium.purchaseSuccess'))
         onClose?.()
       }
     } catch (e) {
-      toast.error(e.message || 'Satın alma başarısız')
+      toast.error(e.message || t('premium.purchaseFailed'))
     }
   }
 
@@ -47,13 +49,13 @@ export default function Premium({ onClose }) {
       const result = await restorePurchases()
       if (result) {
         await fetchProfile(user.id)
-        toast.success('Abonelik geri yüklendi!')
+        toast.success(t('premium.restoreSuccess'))
         onClose?.()
       } else {
-        toast.error('Aktif abonelik bulunamadı')
+        toast.error(t('premium.restoreFailed'))
       }
     } catch (e) {
-      toast.error('Geri yükleme başarısız')
+      toast.error(t('premium.restoreError'))
     }
   }
 
@@ -67,9 +69,9 @@ export default function Premium({ onClose }) {
         body: JSON.stringify({ code: code.trim(), user_id: user.id })
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.detail || 'Geçersiz kod')
+      if (!res.ok) throw new Error(data.detail || t('premium.invalidCode'))
       await fetchProfile(user.id)
-      toast.success('Premium aktif!')
+      toast.success(t('premium.codeActivated'))
       onClose?.()
     } catch (err) { toast.error(err.message) }
     finally { setWebLoading(false) }
@@ -85,9 +87,9 @@ export default function Premium({ onClose }) {
         body: JSON.stringify({ email: email.trim(), user_id: user.id })
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.detail || 'Ödeme bulunamadı')
+      if (!res.ok) throw new Error(data.detail || t('premium.paymentNotFound'))
       await fetchProfile(user.id)
-      toast.success('Premium aktif!')
+      toast.success(t('premium.codeActivated'))
       onClose?.()
     } catch (err) { toast.error(err.message) }
     finally { setWebLoading(false) }
@@ -108,17 +110,17 @@ export default function Premium({ onClose }) {
           <div className="flex items-center gap-3 mb-2">
             <Crown className="w-8 h-8 text-yellow-400" />
             <div>
-              <h2 className="font-black text-xl text-white">GifWave Premium</h2>
-              <p className="text-yellow-400 text-sm font-semibold">Aylık {price}</p>
+              <h2 className="font-black text-xl text-white">{t('premium.title')}</h2>
+              <p className="text-yellow-400 text-sm font-semibold">{t('premium.monthlyPrice', { price })}</p>
             </div>
           </div>
           {isPremium && (
             <div className="mt-3 bg-yellow-500/20 border border-yellow-500/30 rounded-xl px-3 py-2 flex items-center gap-2">
               <Crown className="w-4 h-4 text-yellow-400" />
-              <span className="text-yellow-300 text-sm font-semibold">Premium hesabın aktif!</span>
+              <span className="text-yellow-300 text-sm font-semibold">{t('premium.active')}</span>
               {profile?.premium_until && (
                 <span className="text-yellow-500 text-xs ml-auto">
-                  {new Date(profile.premium_until).toLocaleDateString('tr-TR')} tarihine kadar
+                  {t('premium.validUntil', { date: new Date(profile.premium_until).toLocaleDateString('tr-TR') })}
                 </span>
               )}
             </div>
@@ -150,23 +152,23 @@ export default function Premium({ onClose }) {
                   className="btn-primary w-full py-3 flex items-center justify-center gap-2 text-sm font-bold">
                   {rcLoading
                     ? <Loader2 className="w-4 h-4 animate-spin" />
-                    : <><Crown className="w-4 h-4" /> Abone Ol — {price}</>}
+                    : <><Crown className="w-4 h-4" /> {t('premium.subscribe')} — {price}</>}
                 </button>
                 <button
                   onClick={handleRestore}
                   className="w-full text-xs text-gray-500 hover:text-gray-300 flex items-center justify-center gap-1 py-1">
-                  <RefreshCw className="w-3 h-3" /> Satın almayı geri yükle
+                  <RefreshCw className="w-3 h-3" /> {t('premium.restore')}
                 </button>
 
                 <div className="border-t border-[#2a2a3f] pt-3 space-y-2">
-                  <p className="text-xs text-gray-500 text-center">Aktivasyon kodun var mı?</p>
+                  <p className="text-xs text-gray-500 text-center">{t('premium.activateCode')}</p>
                   <div className="flex gap-2">
                     <input className="input flex-1 text-sm py-2 font-mono tracking-wider uppercase"
-                      placeholder="XXXX-XXXX-XXXX" value={code}
+                      placeholder={t('premium.codePlaceholder')} value={code}
                       onChange={e => setCode(e.target.value.toUpperCase())} />
                     <button onClick={activateWithCode} disabled={webLoading || !code.trim()}
                       className="btn-primary px-4 py-2 text-sm flex-shrink-0 flex items-center gap-1">
-                      {webLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Gift className="w-4 h-4" /> Uygula</>}
+                      {webLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Gift className="w-4 h-4" /> {t('premium.apply')}</>}
                     </button>
                   </div>
                 </div>
@@ -177,8 +179,8 @@ export default function Premium({ onClose }) {
               <>
                 <div className="flex rounded-xl overflow-hidden border border-[#3a3a5c]">
                   {[
-                    { id: 'pay', label: 'Whop' },
-                    { id: 'kod', label: 'Aktivasyon Kodu' },
+                    { id: 'pay', label: t('premium.whopTab') },
+                    { id: 'kod', label: t('premium.codeTab') },
                   ].map(({ id, label }) => (
                     <button key={id} onClick={() => setTab(id)}
                       className={`flex-1 py-2 text-xs font-medium transition-colors ${tab === id ? 'bg-brand-500 text-white' : 'text-gray-400 hover:text-white'}`}>
@@ -189,19 +191,19 @@ export default function Premium({ onClose }) {
 
                 {tab === 'pay' && (
                   <div className="space-y-3">
-                    <p className="text-sm text-gray-400 text-center">Uluslararası kart ile ödeme yap.</p>
+                    <p className="text-sm text-gray-400 text-center">{t('premium.payWithCard')}</p>
                     <a href={WHOP_LINK} target="_blank" rel="noopener noreferrer"
                       className="btn-primary w-full py-3 flex items-center justify-center gap-2 text-sm font-bold">
-                      <Crown className="w-4 h-4" /> Satın Al — ₺{PRICE_TRY}/ay
+                      <Crown className="w-4 h-4" /> {t('premium.buyNow', { price: PRICE_TRY })}
                     </a>
                     <div className="border-t border-[#2a2a3f] pt-3">
-                      <p className="text-xs text-gray-500 mb-2">Ödeme sonrası e-postanı gir:</p>
+                      <p className="text-xs text-gray-500 mb-2">{t('premium.enterEmailAfterPayment')}</p>
                       <div className="flex gap-2">
-                        <input className="input flex-1 text-sm py-2" placeholder="ödeme e-postası..."
+                        <input className="input flex-1 text-sm py-2" placeholder={t('premium.paymentEmailPlaceholder')}
                           value={email} onChange={e => setEmail(e.target.value)} />
                         <button onClick={activateWithEmail} disabled={webLoading || !email.trim()}
                           className="btn-primary px-3 py-2 text-sm flex-shrink-0">
-                          {webLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Aktif Et'}
+                          {webLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : t('premium.activate')}
                         </button>
                       </div>
                     </div>
@@ -210,14 +212,14 @@ export default function Premium({ onClose }) {
 
                 {tab === 'kod' && (
                   <div className="space-y-3">
-                    <p className="text-sm text-gray-400 text-center">Aktivasyon kodunu gir.</p>
+                    <p className="text-sm text-gray-400 text-center">{t('premium.enterCode')}</p>
                     <div className="flex gap-2">
                       <input className="input flex-1 text-sm py-2 font-mono tracking-wider uppercase"
-                        placeholder="XXXX-XXXX-XXXX" value={code}
+                        placeholder={t('premium.codePlaceholder')} value={code}
                         onChange={e => setCode(e.target.value.toUpperCase())} />
                       <button onClick={activateWithCode} disabled={webLoading || !code.trim()}
                         className="btn-primary px-4 py-2 text-sm flex-shrink-0 flex items-center gap-1">
-                        {webLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Gift className="w-4 h-4" /> Uygula</>}
+                        {webLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Gift className="w-4 h-4" /> {t('premium.apply')}</>}
                       </button>
                     </div>
                   </div>

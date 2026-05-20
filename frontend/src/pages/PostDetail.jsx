@@ -4,11 +4,13 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import GIFCard from '../components/GIFCard'
 import { ArrowLeft } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 export default function PostDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { t } = useTranslation()
   const [post, setPost] = useState(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
@@ -55,15 +57,15 @@ export default function PostDetail() {
 
   if (notFound) return (
     <div className="max-w-xl mx-auto px-4 py-16 text-center text-gray-400">
-      <p className="text-lg">Bu gönderi bulunamadı.</p>
-      <button onClick={() => navigate('/')} className="mt-4 btn-primary">Ana Sayfaya Dön</button>
+      <p className="text-lg">{t('postDetail.notFound')}</p>
+      <button onClick={() => navigate('/')} className="mt-4 btn-primary">{t('postDetail.backToHome')}</button>
     </div>
   )
 
   return (
     <div className="max-w-xl mx-auto px-4 py-6">
       <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-gray-400 hover:text-white mb-4 text-sm">
-        <ArrowLeft className="w-4 h-4" /> Geri
+        <ArrowLeft className="w-4 h-4" /> {t('postDetail.back')}
       </button>
       {post && (
         <div className="relative h-[600px] rounded-2xl overflow-hidden">

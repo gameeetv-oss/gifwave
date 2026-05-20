@@ -3,20 +3,22 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { Link } from 'react-router-dom'
 import { Heart, MessageCircle, UserPlus, Repeat2, MessageSquare, Loader2, Check, X, BadgeCheck } from 'lucide-react'
-
-const TYPE_META = {
-  like:           { icon: Heart,          color: 'text-red-400',    bg: 'bg-red-500/10',    text: "GIF'ini beğendi" },
-  comment:        { icon: MessageCircle,  color: 'text-blue-400',   bg: 'bg-blue-500/10',   text: "GIF'ine yorum yaptı" },
-  follow:         { icon: UserPlus,       color: 'text-green-400',  bg: 'bg-green-500/10',  text: 'seni takip etmeye başladı' },
-  follow_request: { icon: UserPlus,       color: 'text-yellow-400', bg: 'bg-yellow-500/10', text: 'seni takip etmek istiyor' },
-  repost:         { icon: Repeat2,        color: 'text-purple-400', bg: 'bg-purple-500/10', text: "GIF'ini repost etti" },
-  dm:             { icon: MessageSquare,  color: 'text-brand-400',  bg: 'bg-brand-500/10',  text: 'sana mesaj gönderdi' },
-}
+import { useTranslation } from 'react-i18next'
 
 export default function Notifications() {
   const { user } = useAuth()
+  const { t } = useTranslation()
   const [notifications, setNotifications] = useState([])
   const [loading, setLoading] = useState(true)
+
+  const TYPE_META = {
+    like:           { icon: Heart,          color: 'text-red-400',    bg: 'bg-red-500/10',    text: t('notifications.types.like') },
+    comment:        { icon: MessageCircle,  color: 'text-blue-400',   bg: 'bg-blue-500/10',   text: t('notifications.types.comment') },
+    follow:         { icon: UserPlus,       color: 'text-green-400',  bg: 'bg-green-500/10',  text: t('notifications.types.follow') },
+    follow_request: { icon: UserPlus,       color: 'text-yellow-400', bg: 'bg-yellow-500/10', text: t('notifications.types.follow_request') },
+    repost:         { icon: Repeat2,        color: 'text-purple-400', bg: 'bg-purple-500/10', text: t('notifications.types.repost') },
+    dm:             { icon: MessageSquare,  color: 'text-brand-400',  bg: 'bg-brand-500/10',  text: t('notifications.types.dm') },
+  }
 
   useEffect(() => {
     if (!user) return
@@ -54,19 +56,19 @@ export default function Notifications() {
   function formatTime(ts) {
     const diff = Date.now() - new Date(ts).getTime()
     const m = Math.floor(diff / 60000)
-    if (m < 1) return 'şimdi'
-    if (m < 60) return `${m}dk önce`
+    if (m < 1) return t('notifications.now')
+    if (m < 60) return t('notifications.minutesAgo', { count: m })
     const h = Math.floor(m / 60)
-    if (h < 24) return `${h}sa önce`
-    return `${Math.floor(h / 24)}g önce`
+    if (h < 24) return t('notifications.hoursAgo', { count: h })
+    return t('notifications.daysAgo', { count: Math.floor(h / 24) })
   }
 
   return (
     <div className="max-w-xl mx-auto px-4 py-6">
-      <h1 className="text-xl font-bold mb-6">Bildirimler</h1>
+      <h1 className="text-xl font-bold mb-6">{t('notifications.title')}</h1>
       {loading && <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-brand-400" /></div>}
       {!loading && notifications.length === 0 && (
-        <div className="text-center py-16 text-gray-500"><p className="text-4xl mb-3">🔔</p><p>Henüz bildirim yok</p></div>
+        <div className="text-center py-16 text-gray-500"><p className="text-4xl mb-3">🔔</p><p>{t('notifications.empty')}</p></div>
       )}
       <div className="space-y-2">
         {notifications.map(notif => {
@@ -95,17 +97,17 @@ export default function Notifications() {
                     <div className="flex gap-2 mt-2">
                       <button onClick={() => handleFollowRequest(notif, true)}
                         className="flex items-center gap-1 text-xs bg-brand-500 hover:bg-brand-600 text-white px-3 py-1 rounded-lg transition-colors">
-                        <Check className="w-3 h-3" /> Onayla
+                        <Check className="w-3 h-3" /> {t('notifications.approve')}
                       </button>
                       <button onClick={() => handleFollowRequest(notif, false)}
                         className="flex items-center gap-1 text-xs bg-white/10 hover:bg-red-500/10 hover:text-red-400 text-gray-300 px-3 py-1 rounded-lg transition-colors">
-                        <X className="w-3 h-3" /> Reddet
+                        <X className="w-3 h-3" /> {t('notifications.reject')}
                       </button>
                     </div>
                   )}
                   {notif.type === 'dm' && (
                     <Link to={`/inbox/${fromUser?.id}`} className="text-xs text-brand-400 hover:underline mt-0.5 block">
-                      Mesajı görüntüle →
+                      {t('notifications.viewMessage')}
                     </Link>
                   )}
                 </div>

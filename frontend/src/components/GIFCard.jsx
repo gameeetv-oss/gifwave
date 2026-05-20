@@ -1,12 +1,17 @@
 import { useState, useEffect, useRef } from 'react'
 import { useInView } from 'react-intersection-observer'
-import { Heart, MessageCircle, Share2, Repeat2, MoreHorizontal, Pencil, Check, X, Loader2, Trash2, BadgeCheck, Play, Pause, Music, ExternalLink, VolumeX, Volume2, Crown } from 'lucide-react'
+import { Heart, MessageCircle, Share2, Repeat2, MoreHorizontal, Pencil, Check, X, Loader2, Trash2, BadgeCheck, Play, Pause, Music, ExternalLink, VolumeX, Volume2, Crown, Flag, Languages } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { usePresence } from '../context/PresenceContext'
 import toast from 'react-hot-toast'
 import CommentModal from './CommentModal'
+import ReportModal from './ReportModal'
+import { playGlobalAudio, stopGlobalAudio, getCurrentUrl, isPlaying } from '../lib/globalAudio'
+import { useTranslation } from 'react-i18next'
+
+const BACKEND = 'https://gifwave-backend.onrender.com'
 
 const isMobile = typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0
 
@@ -25,6 +30,7 @@ function loadYTApi() {
 export default function GIFCard({ post, onDelete }) {
   const { user, profile: myProfile } = useAuth()
   const { onlineUsers } = usePresence()
+  const { t, i18n } = useTranslation()
   const [liked, setLiked] = useState(post.user_liked || false)
   const [likeCount, setLikeCount] = useState(post.likes_count || 0)
   const [commentCount, setCommentCount] = useState(post.comments_count || 0)
@@ -32,6 +38,7 @@ export default function GIFCard({ post, onDelete }) {
   const [repostCount, setRepostCount] = useState(post.reposts_count || 0)
   const [showComments, setShowComments] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
+  const [showReport, setShowReport] = useState(false)
   const [editMode, setEditMode] = useState(false)
   const [editCaption, setEditCaption] = useState(post.caption || '')
   const [editOverlay, setEditOverlay] = useState(() => {
@@ -41,6 +48,10 @@ export default function GIFCard({ post, onDelete }) {
   const [saving, setSaving] = useState(false)
   const [currentPost, setCurrentPost] = useState(post)
   const [captionExpanded, setCaptionExpanded] = useState(false)
+  const [translating, setTranslating] = useState(false)
+  const [translatedCaption, setTranslatedCaption] = useState(null)
+  const [sourceLanguage, setSourceLanguage] = useState(null)
+  const [showTranslated, setShowTranslated] = useState(false)
 
   useEffect(() => { setLiked(post.user_liked || false) }, [post.user_liked])
   useEffect(() => { setReposted(post.user_reposted || false) }, [post.user_reposted])
@@ -50,11 +61,11 @@ export default function GIFCard({ post, onDelete }) {
   const ytContainerRef = useRef(null)
   const ytPlayerRef = useRef(null)
   const userStartedRef = useRef(false)
-  const { ref: musicRef, inView: musicInView } = useInView({ threshold: 0.3 })
+  const { ref: musicRef, inView: musicInView } = useInView({ threshold: 0.6 })
   const ytMusicId = currentPost.music_url ? getYouTubeId(currentPost.music_url) : null
   const [ytReady, setYtReady] = useState(false)
   const [ytPlaying, setYtPlaying] = useState(false)
-  const [ytTitle, setYtTitle] = useState('YouTube Müziği')
+  const [ytTitle, setYtTitle] = useState(t('gifcard.ytTitle'))
   const [ytMounted, setYtMounted] = useState(false)
   const [audioSrc, setAudioSrc] = useState(null)
   const [audioPlaying, setAudioPlaying] = useState(false)
@@ -123,29 +134,37 @@ export default function GIFCard({ post, onDelete }) {
   }, [currentPost.id])
 
   useEffect(() => {
-    if (!audioRef.current || !audioSrc) return
+    if (!audioSrc) return
     if (musicInView) {
-      audioRef.current.play().then(() => {
+      playGlobalAudio(audioSrc).then(() => {
         setAudioPlaying(true)
         setNeedsTap(false)
       }).catch(() => {
-        // WebView autoplay bloke ediyorsa tap göster
         setNeedsTap(true)
       })
     } else {
-      audioRef.current.pause()
-      setAudioPlaying(false)
-      setNeedsTap(false)
+      if (getCurrentUrl() === audioSrc) {
+        stopGlobalAudio()
+        setAudioPlaying(false)
+      }
     }
   }, [musicInView, audioSrc])
 
+  useEffect(() => {
+    if (!audioSrc) return
+    const iv = setInterval(() => {
+      setAudioPlaying(getCurrentUrl() === audioSrc && isPlaying())
+    }, 500)
+    return () => clearInterval(iv)
+  }, [audioSrc])
+
   function toggleAudio() {
-    if (!audioRef.current) return
+    if (!audioSrc) return
     if (audioPlaying) {
-      audioRef.current.pause()
+      stopGlobalAudio()
       setAudioPlaying(false)
     } else {
-      audioRef.current.play().then(() => {
+      playGlobalAudio(audioSrc).then(() => {
         setAudioPlaying(true)
         setNeedsTap(false)
       }).catch(() => {})
@@ -159,7 +178,7 @@ export default function GIFCard({ post, onDelete }) {
   const displayName = post.profiles?.display_name || username
 
   async function toggleLike() {
-    if (!user) { toast.error('Beğenmek için giriş yap'); return }
+    if (!user) { toast.error(t('gifcard.loginToLike')); return }
     const newLiked = !liked
     setLiked(newLiked)
     setLikeCount(n => newLiked ? n + 1 : n - 1)
@@ -175,7 +194,7 @@ export default function GIFCard({ post, onDelete }) {
   }
 
   async function toggleRepost() {
-    if (!user) { toast.error('Repost için giriş yap'); return }
+    if (!user) { toast.error(t('gifcard.loginToRepost')); return }
     const newReposted = !reposted
     setReposted(newReposted)
     setRepostCount(n => newReposted ? n + 1 : Math.max(0, n - 1))
@@ -185,10 +204,10 @@ export default function GIFCard({ post, onDelete }) {
       if (post.user_id !== user.id) {
         supabase.from('notifications').insert({ user_id: post.user_id, type: 'repost', from_user_id: user.id, post_id: post.id })
       }
-      toast.success('Repost yapıldı!')
+      toast.success(t('gifcard.reposted'))
     } else {
       await supabase.from('reposts').delete().eq('user_id', user.id).eq('post_id', post.id)
-      toast('Repost kaldırıldı')
+      toast(t('gifcard.repostRemoved'))
     }
   }
 
@@ -200,15 +219,33 @@ export default function GIFCard({ post, onDelete }) {
     if (!error) {
       setCurrentPost(p => ({ ...p, caption: editCaption, text_overlay: editOverlay, show_overlay: showOverlay }))
       setEditMode(false)
-      toast.success('Gönderi güncellendi')
-    } else toast.error('Güncelleme hatası')
+      toast.success(t('gifcard.postUpdated'))
+    } else toast.error(t('gifcard.updateError'))
     setSaving(false)
   }
 
   async function share() {
     const url = `${window.location.origin}/post/${post.id}`
     if (navigator.share) navigator.share({ title: currentPost.caption || 'GifWave', url })
-    else { await navigator.clipboard.writeText(url); toast.success('Link kopyalandı!') }
+    else { await navigator.clipboard.writeText(url); toast.success(t('gifcard.linkCopied')) }
+  }
+
+  async function translateCaption() {
+    if (showTranslated) { setShowTranslated(false); return }
+    if (translatedCaption) { setShowTranslated(true); return }
+    setTranslating(true)
+    try {
+      const target = i18n.language?.split('-')[0] || 'tr'
+      const res = await fetch(`${BACKEND}/translate?text=${encodeURIComponent(caption)}&target=${target}`)
+      const data = await res.json()
+      if (data.same_language) { toast(t('gifcard.alreadyInYourLanguage')); setTranslating(false); return }
+      setTranslatedCaption(data.translated)
+      setSourceLanguage(i18n.language?.startsWith('tr') ? data.source_name_tr : data.source_name_en)
+      setShowTranslated(true)
+    } catch {
+      toast.error(t('gifcard.translateError'))
+    }
+    setTranslating(false)
   }
 
   function handleCommentClose(newCount) {
@@ -254,7 +291,7 @@ export default function GIFCard({ post, onDelete }) {
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent pointer-events-none" />
 
         {/* Sol alt: kullanıcı + açıklama + müzik */}
-        <div className="absolute bottom-20 left-4 right-20 z-10">
+        <div className="absolute left-4 right-20 z-10" style={{ bottom: 'calc(7rem + env(safe-area-inset-bottom))' }}>
           <Link to={`/profile/${username}`} className="flex items-center gap-2 mb-3">
             <div className="relative">
               <div className="w-10 h-10 rounded-full overflow-hidden bg-brand-800 ring-2 ring-white/30">
@@ -277,16 +314,30 @@ export default function GIFCard({ post, onDelete }) {
           {caption && (
             <div className="mb-2">
               <p className="text-white text-sm leading-snug drop-shadow">
-                {isLongCaption && !captionExpanded ? caption.slice(0, 80) + '...' : caption}
+                {isLongCaption && !captionExpanded
+                  ? (showTranslated ? translatedCaption : caption).slice(0, 80) + '...'
+                  : (showTranslated ? translatedCaption : caption)}
                 {currentPost.tags?.map(tag => (
                   <Link key={tag} to={`/explore?tag=${tag}`} className="text-brand-300 ml-1">#{tag}</Link>
                 ))}
               </p>
-              {isLongCaption && (
-                <button onClick={() => setCaptionExpanded(e => !e)} className="text-white/60 text-xs mt-0.5">
-                  {captionExpanded ? 'Daha az' : 'Devamı'}
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                {isLongCaption && (
+                  <button onClick={() => setCaptionExpanded(e => !e)} className="text-white/60 text-xs">
+                    {captionExpanded ? t('gifcard.less') : t('gifcard.more')}
+                  </button>
+                )}
+                <button onClick={translateCaption} disabled={translating}
+                  className="flex items-center gap-1 text-white/50 text-xs hover:text-white/80 transition-colors">
+                  {translating
+                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                    : <Languages className="w-3 h-3" />}
+                  {showTranslated ? t('gifcard.seeOriginal') : t('gifcard.translate')}
                 </button>
-              )}
+                {showTranslated && sourceLanguage && (
+                  <span className="text-white/40 text-xs">{t('gifcard.translatedFrom', { lang: sourceLanguage })}</span>
+                )}
+              </div>
             </div>
           )}
 
@@ -306,12 +357,11 @@ export default function GIFCard({ post, onDelete }) {
                     ? <Pause className="w-3.5 h-3.5 text-white" />
                     : <Play className="w-3.5 h-3.5 text-white fill-white" />}
                   <Music className={`w-3.5 h-3.5 text-white ${ytPlaying ? 'animate-spin' : ''}`} style={{ animationDuration: '3s' }} />
-                  <span className="text-white text-xs max-w-[160px] truncate">{needsTap ? 'Sese dokun' : ytTitle}</span>
+                  <span className="text-white text-xs max-w-[160px] truncate">{needsTap ? t('gifcard.tapForSound') : ytTitle}</span>
                   {!ytReady && <Loader2 className="w-3 h-3 text-white/60 animate-spin" />}
                 </button>
               ) : audioSrc ? (
                 <>
-                  <audio ref={audioRef} src={audioSrc} loop className="hidden" />
                   <button onClick={toggleAudio}
                     className="flex items-center gap-2 bg-white/10 backdrop-blur rounded-full px-3 py-1.5 w-fit">
                     {needsTap
@@ -320,7 +370,7 @@ export default function GIFCard({ post, onDelete }) {
                       ? <Pause className="w-3.5 h-3.5 text-white" />
                       : <Play className="w-3.5 h-3.5 text-white fill-white" />}
                     <Music className={`w-3.5 h-3.5 text-white ${audioPlaying ? 'animate-spin' : ''}`} style={{ animationDuration: '3s' }} />
-                    <span className="text-white text-xs">{needsTap ? 'Sese dokun' : audioPlaying ? 'Çalıyor' : 'Oynat'}</span>
+                    <span className="text-white text-xs">{needsTap ? t('gifcard.tapForSound') : audioPlaying ? t('gifcard.playing') : t('gifcard.play')}</span>
                   </button>
                 </>
               ) : null}
@@ -329,7 +379,7 @@ export default function GIFCard({ post, onDelete }) {
         </div>
 
         {/* Sağ: aksiyon butonları dikey - TikTok stili */}
-        <div className="absolute right-3 bottom-24 flex flex-col items-center gap-5 z-10">
+        <div className="absolute right-3 flex flex-col items-center gap-5 z-10" style={{ bottom: 'calc(8rem + env(safe-area-inset-bottom))' }}>
           {/* Profil avatar */}
           <Link to={`/profile/${username}`} className="relative mb-2">
             <div className="w-12 h-12 rounded-full overflow-hidden bg-brand-800 ring-2 ring-white">
@@ -361,7 +411,7 @@ export default function GIFCard({ post, onDelete }) {
           {/* Share */}
           <button onClick={share} className="flex flex-col items-center gap-1">
             <Share2 className="w-7 h-7 text-white drop-shadow-lg active:scale-110 transition-transform" />
-            <span className="text-white text-xs font-semibold drop-shadow">Paylaş</span>
+            <span className="text-white text-xs font-semibold drop-shadow">{t('gifcard.share')}</span>
           </button>
 
           {/* More */}
@@ -376,18 +426,24 @@ export default function GIFCard({ post, onDelete }) {
                   <>
                     <button onClick={() => { setEditMode(true); setShowMenu(false) }}
                       className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5">
-                      <Pencil className="w-4 h-4" /> Düzenle
+                      <Pencil className="w-4 h-4" /> {t('gifcard.edit')}
                     </button>
                     <button onClick={() => { setShowMenu(false); onDelete?.(post.id) }}
                       className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10">
-                      <Trash2 className="w-4 h-4" /> Sil
+                      <Trash2 className="w-4 h-4" /> {t('gifcard.delete')}
                     </button>
                   </>
                 )}
                 <button onClick={() => { share(); setShowMenu(false) }}
                   className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5">
-                  <Share2 className="w-4 h-4" /> Paylaş
+                  <Share2 className="w-4 h-4" /> {t('gifcard.share')}
                 </button>
+                {!isOwner && (
+                  <button onClick={() => { setShowMenu(false); setShowReport(true) }}
+                    className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10">
+                    <Flag className="w-4 h-4" /> {t('gifcard.report')}
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -397,23 +453,23 @@ export default function GIFCard({ post, onDelete }) {
         {editMode && (
           <div className="absolute inset-0 bg-black/80 z-30 flex items-end">
             <div className="w-full p-4 space-y-3">
-              <input className="input text-sm w-full" placeholder="Açıklama..." value={editCaption}
+              <input className="input text-sm w-full" placeholder={t('gifcard.captionPlaceholder')} value={editCaption}
                 onChange={e => setEditCaption(e.target.value)} />
-              <input className="input text-sm w-full" placeholder="GIF üzerine yazı (meme tarzı)..."
+              <input className="input text-sm w-full" placeholder={t('gifcard.memeTextPlaceholder')}
                 value={editOverlay} onChange={e => setEditOverlay(e.target.value)} />
               {editOverlay && (
                 <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
                   <input type="checkbox" checked={showOverlay} onChange={e => setShowOverlay(e.target.checked)} />
-                  GIF üzerinde göster
+                  {t('gifcard.showOnGif')}
                 </label>
               )}
               <div className="flex gap-2">
                 <button onClick={saveEdit} disabled={saving}
                   className="btn-primary text-sm px-4 py-2 flex items-center gap-1">
-                  {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Kaydet
+                  {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} {t('common.save')}
                 </button>
                 <button onClick={() => setEditMode(false)} className="btn-ghost text-sm px-4 py-2 flex items-center gap-1">
-                  <X className="w-3 h-3" /> İptal
+                  <X className="w-3 h-3" /> {t('common.cancel')}
                 </button>
               </div>
             </div>
@@ -425,6 +481,13 @@ export default function GIFCard({ post, onDelete }) {
         <CommentModal
           post={{ ...currentPost, comments_count: commentCount }}
           onClose={handleCommentClose}
+        />
+      )}
+      {showReport && (
+        <ReportModal
+          postId={currentPost.id}
+          reportedUserId={currentPost.user_id}
+          onClose={() => setShowReport(false)}
         />
       )}
     </>

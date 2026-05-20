@@ -4,14 +4,17 @@ import GIFCard from './GIFCard'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useBlock } from '../context/BlockContext'
+import { useTranslation } from 'react-i18next'
 
-const AD_EVERY = 5 // Her 5 GIF'te 1 reklam
-const INTERSTITIAL_ID = 'ca-app-pub-4416578432335144/9595174249'
+const AD_EVERY = 5
+const ANDROID_INTERSTITIAL_ID = 'ca-app-pub-4416578432335144/9595174249'
 
 async function showInterstitialAd() {
   try {
+    const platform = window.Capacitor?.getPlatform?.()
+    if (platform !== 'android') return
     const { AdMob } = await import(/* @vite-ignore */ '@capacitor-community/admob')
-    await AdMob.prepareInterstitial({ adId: INTERSTITIAL_ID, isTesting: true })
+    await AdMob.prepareInterstitial({ adId: ANDROID_INTERSTITIAL_ID, isTesting: false })
     await AdMob.showInterstitial()
   } catch {}
 }
@@ -21,6 +24,7 @@ const PAGE_SIZE = 10
 export default function Feed({ mode = 'all' }) {
   const { user, isPremium } = useAuth()
   const { allBlockedIds } = useBlock()
+  const { t } = useTranslation()
   const adCounterRef = useRef(0)
   const [posts, setPosts] = useState([])
   const [hasMore, setHasMore] = useState(true)
@@ -97,8 +101,8 @@ export default function Feed({ mode = 'all' }) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-gray-500">
         <p className="text-5xl mb-4">🎬</p>
-        <p className="font-semibold text-white">Henüz GIF yok</p>
-        {mode === 'following' && <p className="text-sm mt-2 text-gray-400">Birilerini takip et!</p>}
+        <p className="font-semibold text-white">{t('feed.noGifs')}</p>
+        {mode === 'following' && <p className="text-sm mt-2 text-gray-400">{t('feed.followSomeone')}</p>}
       </div>
     )
   }
@@ -132,7 +136,7 @@ export default function Feed({ mode = 'all' }) {
       )}
       {!hasMore && posts.length > 0 && (
         <div className="h-screen snap-start flex items-center justify-center">
-          <p className="text-gray-500 text-sm">Hepsini gördün!</p>
+          <p className="text-gray-500 text-sm">{t('feed.allSeen')}</p>
         </div>
       )}
     </div>

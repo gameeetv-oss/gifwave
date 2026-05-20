@@ -421,6 +421,70 @@ async def generate_codes(req: GenerateCodesRequest):
     return {"codes": codes, "inserted": r.status_code in (200, 201)}
 
 
+LANG_NAMES = {
+    "tr": ("Türkçe", "Turkish"),
+    "en": ("İngilizce", "English"),
+    "es": ("İspanyolca", "Spanish"),
+    "fr": ("Fransızca", "French"),
+    "de": ("Almanca", "German"),
+    "ar": ("Arapça", "Arabic"),
+    "pt": ("Portekizce", "Portuguese"),
+    "it": ("İtalyanca", "Italian"),
+    "ru": ("Rusça", "Russian"),
+    "ja": ("Japonca", "Japanese"),
+    "ko": ("Korece", "Korean"),
+    "zh-cn": ("Çince", "Chinese"),
+    "nl": ("Hollandaca", "Dutch"),
+    "pl": ("Lehçe", "Polish"),
+    "sv": ("İsveççe", "Swedish"),
+    "hi": ("Hintçe", "Hindi"),
+}
+
+_translate_cache: dict = {}
+
+
+@app.get("/translate")
+async def translate_text(text: str = Query(...), target: str = Query("tr")):
+    text = text.strip()
+    if not text or len(text) > 500:
+        raise HTTPException(400, "Metin 1-500 karakter arasında olmalı")
+
+    cache_key = (text, target)
+    if cache_key in _translate_cache:
+        return _translate_cache[cache_key]
+
+    try:
+        from langdetect import detect
+        source = detect(text)
+    except Exception:
+        source = "en"
+
+    if source == target or source.split("-")[0] == target.split("-")[0]:
+        return {"translated": text, "source": source, "same_language": True}
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                "https://api.mymemory.translated.net/get",
+                params={"q": text, "langpair": f"{source}|{target}", "de": "gameeetv@gmail.com"}
+            )
+            data = resp.json()
+            translated = data["responseData"]["translatedText"]
+    except Exception as e:
+        raise HTTPException(500, f"Çeviri hatası: {str(e)[:80]}")
+
+    lang_tr, lang_en = LANG_NAMES.get(source, (source, source))
+    result = {
+        "translated": translated,
+        "source": source,
+        "source_name_tr": lang_tr,
+        "source_name_en": lang_en,
+        "same_language": False,
+    }
+    _translate_cache[cache_key] = result
+    return result
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))

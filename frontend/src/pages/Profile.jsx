@@ -9,19 +9,16 @@ import {
 } from 'lucide-react'
 import GIFCard from '../components/GIFCard'
 import FollowModal from '../components/FollowModal'
+import ReportModal from '../components/ReportModal'
 import { useBlock } from '../context/BlockContext'
 import { usePresence } from '../context/PresenceContext'
 import toast from 'react-hot-toast'
-
-const TABS = [
-  { id: 'posts',   label: 'Gönderiler', icon: Grid3x3 },
-  { id: 'reposts', label: 'Reposts',    icon: Repeat2 },
-  { id: 'liked',   label: 'Beğendikleri', icon: Heart },
-]
+import { useTranslation } from 'react-i18next'
 
 export default function Profile() {
   const { username } = useParams()
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const { user, profile: myProfile, fetchProfile, isPremium } = useAuth()
 
   const [profile, setProfile]       = useState(null)
@@ -29,7 +26,7 @@ export default function Profile() {
   const [posts, setPosts]           = useState([])
   const [reposts, setReposts]       = useState([])
   const [liked, setLiked]           = useState([])
-  const [followStatus, setFollowStatus] = useState(null) // null | 'pending' | 'accepted'
+  const [followStatus, setFollowStatus] = useState(null)
   const [isBlocked, setIsBlocked]   = useState(false)
   const [loading, setLoading]       = useState(true)
   const [editMode, setEditMode]     = useState(false)
@@ -39,10 +36,17 @@ export default function Profile() {
   const [settings, setSettings]     = useState(null)
   const [editSettings, setEditSettings] = useState(null)
   const [showMenu, setShowMenu]     = useState(false)
+  const [showReport, setShowReport] = useState(false)
 
   const isMe = user && (myProfile?.username === username || user.id === username)
   const { blockedIds, allBlockedIds, loadBlocks } = useBlock()
   const { onlineUsers } = usePresence()
+
+  const TABS = [
+    { id: 'posts',   label: t('profile.tabs.posts'),   icon: Grid3x3 },
+    { id: 'reposts', label: t('profile.tabs.reposts'), icon: Repeat2 },
+    { id: 'liked',   label: t('profile.tabs.liked'),   icon: Heart },
+  ]
 
   useEffect(() => { loadProfile() }, [username, user?.id])
 
@@ -113,7 +117,6 @@ export default function Profile() {
     setSettings(finalSett)
     if (isMe) setEditSettings(finalSett)
 
-    // Gizli profil: takipçi değilse gönderileri gizle
     const viewerIsMe = user?.id === prof.id
     if (!viewerIsMe && finalSett.is_private) {
       let isFollower = false
@@ -133,30 +136,27 @@ export default function Profile() {
   }
 
   async function toggleFollow() {
-    if (!user) { toast.error('Giriş yap'); return }
+    if (!user) { toast.error(t('profile.loginRequired')); return }
     if (followStatus === 'accepted') {
-      // Takipten çık
       await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', profile.id)
       setFollowStatus(null)
       setProfile(p => ({ ...p, followers_count: Math.max(0, (p.followers_count || 1) - 1) }))
     } else if (followStatus === 'pending') {
-      // İsteği geri çek
       await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', profile.id)
       setFollowStatus(null)
-      toast('Takip isteği geri alındı')
+      toast(t('profile.requestWithdrawn'))
     } else {
-      // Takip et
       const isPrivate = settings?.is_private
       const status = isPrivate ? 'pending' : 'accepted'
       const { error } = await supabase.from('follows').insert({ follower_id: user.id, following_id: profile.id, status })
-      if (error) { toast.error('Takip hatası'); return }
+      if (error) { toast.error(t('profile.followError')); return }
       setFollowStatus(status)
       if (status === 'accepted') {
         setProfile(p => ({ ...p, followers_count: (p.followers_count || 0) + 1 }))
         await supabase.from('notifications').insert({ user_id: profile.id, type: 'follow', from_user_id: user.id })
       } else {
         await supabase.from('notifications').insert({ user_id: profile.id, type: 'follow_request', from_user_id: user.id })
-        toast('Takip isteği gönderildi')
+        toast(t('profile.followRequestSent'))
       }
     }
     fetchProfile(user.id)
@@ -169,7 +169,7 @@ export default function Profile() {
       await supabase.from('blocks').delete().eq('blocker_id', user.id).eq('blocked_id', profile.id)
       setIsBlocked(false)
       loadBlocks()
-      toast('Engel kaldırıldı')
+      toast(t('profile.blockRemoved'))
     } else {
       await supabase.from('blocks').insert({ blocker_id: user.id, blocked_id: profile.id })
       await supabase.from('follows').delete()
@@ -177,7 +177,7 @@ export default function Profile() {
       setIsBlocked(true)
       setFollowStatus(null)
       loadBlocks()
-      toast.success('Kullanıcı engellendi')
+      toast.success(t('profile.userBlocked'))
     }
   }
 
@@ -185,11 +185,10 @@ export default function Profile() {
     setSaving(true)
     const newUsername = editData.username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '')
     if (newUsername !== profile.username) {
-      if (newUsername.length < 3) { toast.error('Kullanıcı adı en az 3 karakter'); setSaving(false); return }
+      if (newUsername.length < 3) { toast.error(t('profile.usernameTooShort')); setSaving(false); return }
       const { data: existing } = await supabase.from('profiles').select('id').eq('username', newUsername).maybeSingle()
-      if (existing) { toast.error('Bu kullanıcı adı alınmış'); setSaving(false); return }
+      if (existing) { toast.error(t('profile.usernameTaken')); setSaving(false); return }
     }
-    // Profil + ayarları aynı anda kaydet
     const [profileRes, settingsRes] = await Promise.all([
       supabase.from('profiles')
         .update({ bio: editData.bio.trim(), display_name: editData.display_name.trim(), username: newUsername, show_online_status: editData.show_online_status })
@@ -201,7 +200,7 @@ export default function Profile() {
     const error = profileRes.error || settingsRes.error
     if (editSettings && !settingsRes.error) setSettings(editSettings)
     if (!error) {
-      toast.success('Profil güncellendi')
+      toast.success(t('profile.profileUpdated'))
       setEditMode(false)
       setProfile(p => ({ ...p, ...editData, username: newUsername }))
       fetchProfile(user.id)
@@ -213,29 +212,29 @@ export default function Profile() {
   async function saveSettings() {
     if (!editSettings) return
     const { error } = await supabase.from('user_settings').upsert({ user_id: user.id, ...editSettings })
-    if (!error) { setSettings(editSettings); toast.success('Ayarlar kaydedildi') }
-    else toast.error('Ayar kaydı hatası')
+    if (!error) { setSettings(editSettings); toast.success(t('profile.settingsSaved')) }
+    else toast.error(t('profile.settingsSaveError'))
   }
 
   async function uploadAvatar(e) {
     const file = e.target.files[0]
     if (!file) return
     const isGif = file.type === 'image/gif' || file.name.endsWith('.gif')
-    if (isGif && !isPremium) { toast.error('Hareketli profil fotoğrafı Premium özelliğidir!'); return }
+    if (isGif && !isPremium) { toast.error(t('profile.premiumAvatarRequired')); return }
     const ext = file.name.split('.').pop()
     const path = `avatars/${user.id}.${ext}`
     const { error } = await supabase.storage.from('gifs').upload(path, file, { upsert: true })
-    if (error) { toast.error('Avatar yükleme hatası'); return }
+    if (error) { toast.error(t('profile.avatarUploadError')); return }
     const { data: { publicUrl } } = supabase.storage.from('gifs').getPublicUrl(path)
     await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id)
-    toast.success('Profil fotoğrafı güncellendi')
+    toast.success(t('profile.avatarUpdated'))
     setProfile(p => ({ ...p, avatar_url: publicUrl }))
     fetchProfile(user.id)
   }
 
   async function deleteAccount() {
-    if (!window.confirm('Hesabını kalıcı olarak silmek istediğinden emin misin? Bu işlem geri alınamaz.')) return
-    if (!window.confirm('Son onay: Tüm GIF\'lerin, yorumların ve verilerinin silineceğini onaylıyor musun?')) return
+    if (!window.confirm(t('profile.deleteAccountConfirm'))) return
+    if (!window.confirm(t('profile.deleteAccountConfirm2'))) return
     try {
       await supabase.from('posts').delete().eq('user_id', user.id)
       await supabase.from('likes').delete().eq('user_id', user.id)
@@ -246,51 +245,47 @@ export default function Profile() {
       await supabase.auth.signOut()
       window.location.href = '/login'
     } catch {
-      toast.error('Hesap silinirken hata oluştu. Destek için support@gifwave.app adresine yazın.')
+      toast.error(t('profile.deleteAccountError'))
     }
   }
 
   async function deletePost(postId) {
-    if (!window.confirm('Bu gönderiyi silmek istiyor musun?')) return
+    if (!window.confirm(t('profile.deletePostConfirm'))) return
     const { error } = await supabase.from('posts').delete().eq('id', postId).eq('user_id', user.id)
-    if (!error) { setPosts(prev => prev.filter(p => p.id !== postId)); toast.success('Gönderi silindi') }
-    else toast.error('Silme hatası')
+    if (!error) { setPosts(prev => prev.filter(p => p.id !== postId)); toast.success(t('profile.postDeleted')) }
+    else toast.error(t('profile.postDeleteError'))
   }
 
   const currentItems = tab === 'posts' ? posts : tab === 'reposts' ? reposts : liked
 
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-brand-400" /></div>
   if (!profile) return (
-    <div className="text-center py-20 text-gray-500"><p className="text-4xl mb-2">😕</p><p>Kullanıcı bulunamadı</p></div>
+    <div className="text-center py-20 text-gray-500"><p className="text-4xl mb-2">😕</p><p>{t('profile.userNotFound')}</p></div>
   )
 
-  // Engelleme ekranı
   if (!isMe && profile && allBlockedIds.has(profile.id)) {
     const iBlockedThem = blockedIds.has(profile.id)
     return (
       <div className="max-w-2xl mx-auto px-4 py-20 text-center text-gray-500">
         <Shield className="w-14 h-14 mx-auto mb-4 text-gray-600" />
         <p className="text-lg font-semibold text-gray-300 mb-2">
-          {iBlockedThem ? 'Bu kullanıcıyı engellediniz' : 'Bu içeriği görüntüleyemezsiniz'}
+          {iBlockedThem ? t('profile.blockedTitle') : t('profile.blockedByTitle')}
         </p>
         <p className="text-sm text-gray-600 mb-6">
-          {iBlockedThem
-            ? 'Engeli kaldırana kadar profil ve gönderiler gizlenir.'
-            : 'Bu kullanıcı sizi engelledi.'}
+          {iBlockedThem ? t('profile.blockedDesc') : t('profile.blockedByDesc')}
         </p>
         {iBlockedThem && (
-          <button onClick={toggleBlock} className="btn-ghost text-sm">Engeli Kaldır</button>
+          <button onClick={toggleBlock} className="btn-ghost text-sm">{t('profile.unblockUser')}</button>
         )}
       </div>
     )
   }
 
-  // Follow butonu metni
   const followBtnLabel = followStatus === 'accepted'
-    ? <><UserMinus className="w-4 h-4" /><span className="hidden sm:inline">Takibi Bırak</span></>
+    ? <><UserMinus className="w-4 h-4" /><span className="hidden sm:inline">{t('profile.unfollow')}</span></>
     : followStatus === 'pending'
-    ? <><Clock className="w-4 h-4" /><span className="hidden sm:inline">İstek Gönderildi</span></>
-    : <><UserPlus className="w-4 h-4" /><span className="hidden sm:inline">Takip Et</span></>
+    ? <><Clock className="w-4 h-4" /><span className="hidden sm:inline">{t('profile.pendingRequest')}</span></>
+    : <><UserPlus className="w-4 h-4" /><span className="hidden sm:inline">{t('profile.follow')}</span></>
 
   const followBtnClass = followStatus === 'accepted'
     ? 'bg-white/10 hover:bg-red-500/10 hover:text-red-400 text-gray-300'
@@ -325,30 +320,30 @@ export default function Profile() {
               <div className="min-w-0 flex-1">
                 {editMode ? (
                   <div className="space-y-2">
-                    <input className="input text-sm" placeholder="Görünen ad"
+                    <input className="input text-sm" placeholder={t('profile.displayNamePlaceholder')}
                       value={editData.display_name} onChange={e => setEditData(d => ({ ...d, display_name: e.target.value }))} />
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">@</span>
-                      <input className="input text-sm pl-7" placeholder="kullaniciadi"
+                      <input className="input text-sm pl-7" placeholder={t('profile.usernamePlaceholder')}
                         value={editData.username}
                         onChange={e => setEditData(d => ({ ...d, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') }))} />
                     </div>
-                    <textarea className="input text-sm resize-none" rows={2} placeholder="Biyografi..."
+                    <textarea className="input text-sm resize-none" rows={2} placeholder={t('profile.biographyPlaceholder')}
                       value={editData.bio} onChange={e => setEditData(d => ({ ...d, bio: e.target.value }))} />
 
                     {/* Gizlilik Ayarları */}
                     <div className="border border-[#2a2a3f] rounded-xl p-3 space-y-2">
-                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Gizlilik</p>
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t('profile.privacy.title')}</p>
                       <label className="flex items-center justify-between text-sm text-gray-300 cursor-pointer select-none">
-                        <span className="text-xs">Çevrimiçi durumumu göster</span>
+                        <span className="text-xs">{t('profile.privacy.showOnline')}</span>
                         <input type="checkbox" checked={!!editData.show_online_status} className="ml-2 accent-brand-500"
                           onChange={e => setEditData(d => ({ ...d, show_online_status: e.target.checked }))} />
                       </label>
                       {editSettings && [
-                        { key: 'is_private',          label: 'Gizli hesap (takip isteği gönderilir)' },
-                        { key: 'show_liked_posts',    label: 'Beğendiklerimi göster' },
-                        { key: 'allow_dm',            label: 'Mesaj almaya izin ver' },
-                        { key: 'show_read_receipts',  label: 'Okundu bilgisi gönder' },
+                        { key: 'is_private',          label: t('profile.privacy.privateAccount') },
+                        { key: 'show_liked_posts',    label: t('profile.privacy.showLiked') },
+                        { key: 'allow_dm',            label: t('profile.privacy.allowDm') },
+                        { key: 'show_read_receipts',  label: t('profile.privacy.showReadReceipts') },
                       ].map(({ key, label }) => (
                         <label key={key} className="flex items-center justify-between text-sm text-gray-300 cursor-pointer select-none">
                           <span className="text-xs">{label}</span>
@@ -357,16 +352,16 @@ export default function Profile() {
                         </label>
                       ))}
                       {editSettings && [
-                        { key: 'who_can_comment', label: 'Yorum yapabilir' },
-                        { key: 'who_can_reply',   label: 'Yanıtlayabilir' },
+                        { key: 'who_can_comment', label: t('profile.privacy.whoCanComment') },
+                        { key: 'who_can_reply',   label: t('profile.privacy.whoCanReply') },
                       ].map(({ key, label }) => (
                         <label key={key} className="flex items-center justify-between text-sm text-gray-300 select-none">
                           <span className="text-xs">{label}</span>
                           <select value={editSettings[key] || 'all'} className="ml-2 bg-[#1a1a2e] border border-[#3a3a5c] rounded-lg text-xs text-gray-300 px-2 py-1"
                             onChange={e => setEditSettings(s => ({ ...s, [key]: e.target.value }))}>
-                            <option value="all">Herkes</option>
-                            <option value="followers">Takipçiler</option>
-                            <option value="none">Kapalı</option>
+                            <option value="all">{t('profile.privacy.everyone')}</option>
+                            <option value="followers">{t('profile.privacy.followers')}</option>
+                            <option value="none">{t('profile.privacy.none')}</option>
                           </select>
                         </label>
                       ))}
@@ -375,14 +370,14 @@ export default function Profile() {
                     <div className="flex gap-2">
                       <button onClick={saveProfile} disabled={saving}
                         className="btn-primary text-sm px-3 py-1.5 flex items-center gap-1">
-                        {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Kaydet
+                        {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} {t('common.save')}
                       </button>
                       <button onClick={() => setEditMode(false)} className="btn-ghost text-sm px-3 py-1.5 flex items-center gap-1">
-                        <X className="w-3 h-3" /> İptal
+                        <X className="w-3 h-3" /> {t('common.cancel')}
                       </button>
                       <button onClick={deleteAccount}
                         className="text-sm px-3 py-1.5 flex items-center gap-1 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl transition-colors">
-                        Hesabı Sil
+                        {t('profile.deleteAccount')}
                       </button>
                     </div>
                   </div>
@@ -391,12 +386,12 @@ export default function Profile() {
                     <h1 className="font-bold text-xl flex items-center gap-1.5 min-w-0">
                       <span className="truncate">{profile.display_name || profile.username}</span>
                       {profile.is_verified && <BadgeCheck className="w-5 h-5 text-blue-400 flex-shrink-0" />}
-                      {settings?.is_private && <span className="text-xs text-gray-500 bg-white/5 px-2 py-0.5 rounded-full flex-shrink-0">Gizli</span>}
+                      {settings?.is_private && <span className="text-xs text-gray-500 bg-white/5 px-2 py-0.5 rounded-full flex-shrink-0">{t('profile.private')}</span>}
                     </h1>
                     <p className="text-gray-500 text-sm">@{profile.username}</p>
                     {profile.bio
                       ? <p className="text-gray-400 text-sm mt-1">{profile.bio}</p>
-                      : isMe && <p className="text-gray-600 text-sm mt-1 italic cursor-pointer hover:text-gray-400" onClick={() => setEditMode(true)}>Biyografi ekle...</p>
+                      : isMe && <p className="text-gray-600 text-sm mt-1 italic cursor-pointer hover:text-gray-400" onClick={() => setEditMode(true)}>{t('profile.addBio')}</p>
                     }
                   </>
                 )}
@@ -407,7 +402,7 @@ export default function Profile() {
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     <button onClick={() => { setEditSettings(settings); setEditMode(true) }}
                       className="btn-ghost text-sm flex items-center gap-1.5">
-                      <Pencil className="w-3.5 h-3.5" /><span className="hidden sm:inline">Düzenle</span>
+                      <Pencil className="w-3.5 h-3.5" /><span className="hidden sm:inline">{t('profile.edit')}</span>
                     </button>
                     <button onClick={() => window.open('mailto:support@gifwave.app?subject=Support Request')}
                       className="btn-ghost text-sm flex items-center gap-1.5 text-gray-500 hover:text-gray-300">
@@ -426,7 +421,6 @@ export default function Profile() {
                         <MessageSquare className="w-4 h-4" />
                       </Link>
                     )}
-                    {/* 3 nokta menüsü */}
                     <div className="relative">
                       <button onClick={e => { e.stopPropagation(); setShowMenu(m => !m) }}
                         className="text-gray-500 hover:text-white p-2 rounded-xl hover:bg-white/5 transition-all">
@@ -435,20 +429,15 @@ export default function Profile() {
                       {showMenu && (
                         <div className="absolute right-0 top-9 bg-[#1a1a2e] border border-[#3a3a5c] rounded-xl shadow-xl z-20 min-w-[180px] py-1"
                           onClick={e => e.stopPropagation()}>
-                          <button onClick={() => {
-                            setShowMenu(false)
-                            const subject = encodeURIComponent(`Report: @${profile.username}`)
-                            const body = encodeURIComponent(`I want to report the user @${profile.username} for the following reason:\n\n`)
-                            window.open(`mailto:support@gifwave.app?subject=${subject}&body=${body}`)
-                          }}
+                          <button onClick={() => { setShowMenu(false); setShowReport(true) }}
                             className="w-full flex items-center gap-2 px-4 py-2 text-sm text-orange-400 hover:bg-orange-500/10 transition-colors">
-                            <Flag className="w-4 h-4" /> Şikayet Et
+                            <Flag className="w-4 h-4" /> {t('profile.reportUser')}
                           </button>
                           <button onClick={toggleBlock}
                             className={`w-full flex items-center gap-2 px-4 py-2 text-sm transition-colors ${
                               isBlocked ? 'text-gray-300 hover:bg-white/5' : 'text-red-400 hover:bg-red-500/10'
                             }`}>
-                            {isBlocked ? <><ShieldOff className="w-4 h-4" /> Engeli Kaldır</> : <><Shield className="w-4 h-4" /> Engelle</>}
+                            {isBlocked ? <><ShieldOff className="w-4 h-4" /> {t('profile.unblockUser')}</> : <><Shield className="w-4 h-4" /> {t('profile.blockUser')}</>}
                           </button>
                         </div>
                       )}
@@ -461,15 +450,15 @@ export default function Profile() {
             <div className="flex gap-5 mt-4 text-sm">
               <div className="text-center">
                 <p className="font-bold text-white">{posts.length}</p>
-                <p className="text-gray-500">Gönderi</p>
+                <p className="text-gray-500">{t('profile.postsLabel')}</p>
               </div>
               <button onClick={() => setFollowModal('followers')} className="text-center hover:opacity-70 transition-opacity">
                 <p className="font-bold text-white">{profile.followers_count || 0}</p>
-                <p className="text-gray-500">Takipçi</p>
+                <p className="text-gray-500">{t('profile.followersLabel')}</p>
               </button>
               <button onClick={() => setFollowModal('following')} className="text-center hover:opacity-70 transition-opacity">
                 <p className="font-bold text-white">{profile.following_count || 0}</p>
-                <p className="text-gray-500">Takip</p>
+                <p className="text-gray-500">{t('profile.followingLabel')}</p>
               </button>
             </div>
           </div>
@@ -495,13 +484,13 @@ export default function Profile() {
       {!isMe && settings?.is_private && followStatus !== 'accepted' ? (
         <div className="text-center py-16 text-gray-500">
           <Shield className="w-12 h-12 mx-auto mb-3 text-gray-600" />
-          <p className="text-base font-semibold text-gray-300 mb-1">Bu hesap gizlidir</p>
-          <p className="text-sm text-gray-600">Gönderileri görmek için takip isteği gönder.</p>
+          <p className="text-base font-semibold text-gray-300 mb-1">{t('profile.privateAccountTitle')}</p>
+          <p className="text-sm text-gray-600">{t('profile.privateAccountDesc')}</p>
         </div>
       ) : currentItems.length === 0 ? (
         <div className="text-center py-12 text-gray-500">
           <p className="text-3xl mb-2">{tab === 'posts' ? '🎬' : tab === 'reposts' ? '🔁' : '❤️'}</p>
-          <p className="text-sm">{tab === 'posts' ? 'Henüz gönderi yok' : tab === 'reposts' ? 'Henüz repost yok' : 'Henüz beğeni yok'}</p>
+          <p className="text-sm">{tab === 'posts' ? t('profile.noPostsYet') : tab === 'reposts' ? t('profile.noRepostsYet') : t('profile.noLikesYet')}</p>
         </div>
       ) : currentItems.length > 0 ? (
         <div className="space-y-4">
@@ -517,6 +506,12 @@ export default function Profile() {
       {followModal && (
         <FollowModal profileId={profile.id} type={followModal}
           onClose={() => setFollowModal(null)} onCountChange={loadProfile} />
+      )}
+      {showReport && profile && (
+        <ReportModal
+          reportedUserId={profile.id}
+          onClose={() => setShowReport(false)}
+        />
       )}
     </div>
   )
