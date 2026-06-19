@@ -559,6 +559,39 @@ async def submit_report(payload: ReportPayload, request: Request):
     return {"success": True}
 
 
+@app.delete("/user")
+async def delete_user_account(request: Request):
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        raise HTTPException(401, "Unauthorized")
+    user_token = auth.split(" ", 1)[1]
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(
+            f"{SUPABASE_URL}/auth/v1/user",
+            headers={"Authorization": f"Bearer {user_token}", "apikey": SUPABASE_SERVICE_KEY}
+        )
+        if r.status_code != 200:
+            raise HTTPException(401, "Invalid token")
+        user_id = r.json().get("id")
+
+    if not user_id:
+        raise HTTPException(401, "Could not identify user")
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.delete(
+            f"{SUPABASE_URL}/auth/v1/admin/users/{user_id}",
+            headers={
+                "apikey": SUPABASE_SERVICE_KEY,
+                "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+            }
+        )
+        if r.status_code not in (200, 204):
+            raise HTTPException(500, f"Hesap silinemedi")
+
+    return {"success": True}
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))
