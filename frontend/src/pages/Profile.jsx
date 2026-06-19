@@ -10,6 +10,9 @@ import {
 import GIFCard from '../components/GIFCard'
 import FollowModal from '../components/FollowModal'
 import ReportModal from '../components/ReportModal'
+import ConfirmModal from '../components/ConfirmModal'
+
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://gifwave-backend.onrender.com'
 import { useBlock } from '../context/BlockContext'
 import { usePresence } from '../context/PresenceContext'
 import toast from 'react-hot-toast'
@@ -39,6 +42,7 @@ export default function Profile() {
   const [editSettings, setEditSettings] = useState(null)
   const [showMenu, setShowMenu]     = useState(false)
   const [showReport, setShowReport] = useState(false)
+  const [confirmAction, setConfirmAction] = useState(null)
 
   const isMe = user && (myProfile?.username === username || user.id === username)
   const { blockedIds, allBlockedIds, loadBlocks } = useBlock()
@@ -251,16 +255,21 @@ export default function Profile() {
     fetchProfile(user.id)
   }
 
-  async function deleteAccount() {
-    if (!window.confirm(t('profile.deleteAccountConfirm'))) return
-    if (!window.confirm(t('profile.deleteAccountConfirm2'))) return
+  async function executeDeleteAccount() {
+    setConfirmAction(null)
     try {
+      const { data: { session } } = await supabase.auth.getSession()
       await supabase.from('posts').delete().eq('user_id', user.id)
       await supabase.from('likes').delete().eq('user_id', user.id)
       await supabase.from('reposts').delete().eq('user_id', user.id)
       await supabase.from('follows').delete().eq('follower_id', user.id)
       await supabase.from('follows').delete().eq('following_id', user.id)
       await supabase.from('profiles').delete().eq('id', user.id)
+      const res = await fetch(`${BACKEND_URL}/user`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${session?.access_token}` },
+      })
+      if (!res.ok) throw new Error('delete failed')
       await supabase.auth.signOut()
       window.location.href = '/login'
     } catch {
@@ -269,7 +278,11 @@ export default function Profile() {
   }
 
   async function deletePost(postId) {
-    if (!window.confirm(t('profile.deletePostConfirm'))) return
+    setConfirmAction({ type: 'deletePost', id: postId })
+  }
+
+  async function executeDeletePost(postId) {
+    setConfirmAction(null)
     const { error } = await supabase.from('posts').delete().eq('id', postId).eq('user_id', user.id)
     if (!error) { setPosts(prev => prev.filter(p => p.id !== postId)); toast.success(t('profile.postDeleted')) }
     else toast.error(t('profile.postDeleteError'))
@@ -394,7 +407,7 @@ export default function Profile() {
                       <button onClick={() => setEditMode(false)} className="btn-ghost text-sm px-3 py-1.5 flex items-center gap-1">
                         <X className="w-3 h-3" /> {t('common.cancel')}
                       </button>
-                      <button onClick={deleteAccount}
+                      <button onClick={() => setConfirmAction({ type: 'deleteAccount' })}
                         className="text-sm px-3 py-1.5 flex items-center gap-1 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl transition-colors">
                         {t('profile.deleteAccount')}
                       </button>
@@ -555,6 +568,25 @@ export default function Profile() {
         <ReportModal
           reportedUserId={profile.id}
           onClose={() => setShowReport(false)}
+        />
+      )}
+      {confirmAction?.type === 'deleteAccount' && (
+        <ConfirmModal
+          title={t('profile.deleteAccount')}
+          message={t('profile.deleteAccountConfirm') + ' ' + t('profile.deleteAccountConfirm2')}
+          confirmLabel={t('profile.deleteAccount')}
+          danger
+          onConfirm={executeDeleteAccount}
+          onCancel={() => setConfirmAction(null)}
+        />
+      )}
+      {confirmAction?.type === 'deletePost' && (
+        <ConfirmModal
+          title={t('profile.deletePostConfirm')}
+          confirmLabel={t('common.delete')}
+          danger
+          onConfirm={() => executeDeletePost(confirmAction.id)}
+          onCancel={() => setConfirmAction(null)}
         />
       )}
     </div>

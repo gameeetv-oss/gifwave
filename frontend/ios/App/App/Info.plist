@@ -2,12 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CAPACITOR_DEBUG</key>
+	<key>CAPACITOR_DEBUG</key>
 	<string>$(CAPACITOR_DEBUG)</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-        <string>GifWave</string>
+	<string>GifWave</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -19,11 +19,21 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>$(MARKETING_VERSION)</string>
+	<string>1.0</string>
 	<key>CFBundleVersion</key>
-	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<string>5</string>
+	<key>GADApplicationIdentifier</key>
+	<string>ca-app-pub-4416578432335144~6450136156</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>GifWave uses the camera to record GIFs for your profile.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>GifWave saves GIFs to your photo library.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>GifWave accesses your photo library to upload GIFs.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
@@ -47,15 +57,18 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
-	<key>NSCameraUsageDescription</key>
-	<string>GifWave uses the camera to record GIFs for your profile.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>GifWave accesses your photo library to upload GIFs.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>GifWave saves GIFs to your photo library.</string>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
 	<key>WKAudiovisualMediaTypes</key>
 	<string>all</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.gifwave.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.gifwave.app</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

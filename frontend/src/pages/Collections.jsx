@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { useTranslation } from 'react-i18next'
 import { Loader2, FolderOpen, Trash2, ArrowLeft } from 'lucide-react'
 import GIFCard from '../components/GIFCard'
+import ConfirmModal from '../components/ConfirmModal'
 import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
 
@@ -16,6 +17,7 @@ export default function Collections() {
   const [activeCollection, setActiveCollection] = useState(null)
   const [collectionPosts, setCollectionPosts] = useState([])
   const [loadingPosts, setLoadingPosts] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(null)
 
   useEffect(() => {
     if (!user) return
@@ -77,8 +79,8 @@ export default function Collections() {
     setLoadingPosts(false)
   }
 
-  async function deleteCollection(col) {
-    if (!window.confirm(t('collections.deleteConfirm'))) return
+  async function executeDeleteCollection(col) {
+    setConfirmDelete(null)
     await supabase.from('collections').delete().eq('id', col.id).eq('user_id', user.id)
     setCollections(c => c.filter(x => x.id !== col.id))
     if (activeCollection?.id === col.id) setActiveCollection(null)
@@ -109,7 +111,7 @@ export default function Collections() {
             <h1 className="text-white font-bold text-2xl">{activeCollection.name}</h1>
             <p className="text-gray-500 text-sm mt-1">{t('collections.gifCount', { count: collectionPosts.length })}</p>
           </div>
-          <button onClick={() => deleteCollection(activeCollection)}
+          <button onClick={() => setConfirmDelete(activeCollection)}
             className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-2 rounded-xl transition-colors">
             <Trash2 className="w-4 h-4" />
           </button>
@@ -156,13 +158,22 @@ export default function Collections() {
                 <p className="text-white font-semibold text-sm truncate">{col.name}</p>
                 <p className="text-gray-500 text-xs mt-1">{t('collections.gifCount', { count: col.gif_count })}</p>
               </button>
-              <button onClick={e => { e.stopPropagation(); deleteCollection(col) }}
+              <button onClick={e => { e.stopPropagation(); setConfirmDelete(col) }}
                 className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 p-1.5 rounded-lg hover:bg-red-500/10 transition-all">
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
             </div>
           ))}
         </div>
+      )}
+      {confirmDelete && (
+        <ConfirmModal
+          title={t('collections.deleteConfirm')}
+          confirmLabel={t('common.delete')}
+          danger
+          onConfirm={() => executeDeleteCollection(confirmDelete)}
+          onCancel={() => setConfirmDelete(null)}
+        />
       )}
     </div>
   )

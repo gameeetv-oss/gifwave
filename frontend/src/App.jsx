@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { supabase } from './lib/supabase'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { PresenceProvider } from './context/PresenceContext'
 import { BlockProvider } from './context/BlockContext'
@@ -69,12 +70,44 @@ function BackendWarmup() {
   return null
 }
 
+function DeepLinkHandler() {
+  const navigate = useNavigate()
+  useEffect(() => {
+    let cleanup = () => {}
+    async function setup() {
+      try {
+        const { App: CapApp } = await import('@capacitor/app')
+        const handle = await CapApp.addListener('appUrlOpen', async (event) => {
+          const url = event.url
+          if (url.includes('type=recovery') || url.includes('reset-password')) {
+            const hash = url.includes('#') ? url.split('#')[1] : ''
+            if (hash) {
+              const params = new URLSearchParams(hash)
+              const accessToken = params.get('access_token')
+              const refreshToken = params.get('refresh_token')
+              if (accessToken && refreshToken) {
+                await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+              }
+            }
+            navigate('/reset-password')
+          }
+        })
+        cleanup = () => handle.remove()
+      } catch {}
+    }
+    setup()
+    return () => cleanup()
+  }, [navigate])
+  return null
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <PresenceProvider>
         <BlockProvider>
           <BackendWarmup />
+          <DeepLinkHandler />
           <AppRoutes />
         </BlockProvider>
       </PresenceProvider>
