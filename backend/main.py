@@ -70,6 +70,47 @@ async def search(q: str = Query(...), limit: int = Query(20, le=50), pos: str = 
     return {"gifs": parse_tenor(data.get("results", [])), "next": data.get("next", "")}
 
 
+@app.post("/extract-audio")
+async def extract_audio_from_video(file: UploadFile = File(...)):
+    """Video dosyasından mp3 ses çıkarır."""
+    allowed_types = ["video/mp4", "video/webm", "video/quicktime", "video/avi", "video/x-m4v"]
+    ctype = (file.content_type or "").lower()
+    if ctype and not any(ctype.startswith(a.split(";")[0]) for a in allowed_types):
+        raise HTTPException(status_code=400, detail="Desteklenmeyen video formatı")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        input_path = os.path.join(tmpdir, f"input_{file.filename or 'video'}")
+        output_path = os.path.join(tmpdir, "output.mp3")
+
+        content = await file.read()
+        if len(content) > 50 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Dosya çok büyük (maks 50MB)")
+        with open(input_path, "wb") as f:
+            f.write(content)
+
+        try:
+            subprocess.run([
+                "ffmpeg", "-y", "-i", input_path,
+                "-vn", "-acodec", "libmp3lame", "-q:a", "4",
+                output_path
+            ], check=True, capture_output=True, timeout=90)
+        except subprocess.CalledProcessError as e:
+            raise HTTPException(status_code=500, detail=f"Ses çıkarma hatası: {e.stderr.decode()[:200]}")
+        except subprocess.TimeoutExpired:
+            raise HTTPException(status_code=500, detail="Zaman aşımı")
+        except FileNotFoundError:
+            raise HTTPException(status_code=500, detail="ffmpeg kurulu değil")
+
+        if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+            raise HTTPException(status_code=500, detail="Ses çıkarılamadı (videoda ses olmayabilir)")
+
+        with open(output_path, "rb") as f:
+            audio_bytes = f.read()
+
+    return Response(content=audio_bytes, media_type="audio/mpeg",
+                    headers={"Content-Disposition": "attachment; filename=extracted.mp3"})
+
+
 @app.post("/convert")
 async def convert_video_to_gif(file: UploadFile = File(...)):
     allowed_types = ["video/mp4", "video/webm", "video/quicktime", "video/avi"]
