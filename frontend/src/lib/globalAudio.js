@@ -3,6 +3,7 @@ let _currentUrl = null
 let _onPlay = null
 let _onStop = null
 let _unlocked = false
+let _wasPlayingBeforeHide = false
 
 async function _unlockAudio() {
   if (_unlocked) return
@@ -20,6 +21,8 @@ async function _unlockAudio() {
     a.volume = 0
     await a.play().catch(() => {})
     _unlocked = true
+    // Kilit açıldı — ekranda bekleyen müzik varsa kartlar yeniden denesin
+    window.dispatchEvent(new Event('gifwave-audio-unlocked'))
   } catch (e) {}
 }
 
@@ -27,6 +30,17 @@ async function _unlockAudio() {
 ;['touchstart', 'touchend', 'click'].forEach(ev =>
   document.addEventListener(ev, _unlockAudio, { once: false, passive: true })
 )
+
+// Uygulama arka plana geçince müziği duraklat, öne gelince devam ettir
+document.addEventListener('visibilitychange', () => {
+  if (!_audio) return
+  if (document.hidden) {
+    _wasPlayingBeforeHide = !_audio.paused
+    _audio.pause()
+  } else if (_wasPlayingBeforeHide) {
+    _audio.play().catch(() => {})
+  }
+})
 
 export function onMusicChange(playFn, stopFn) {
   _onPlay = playFn
@@ -50,9 +64,16 @@ export async function playGlobalAudio(url) {
   a.loop = true
   a.volume = 1
   a.playsInline = true
+  a.preload = 'auto'
   _audio = a
 
   await a.play()
+  // play() beklerken uygulama arka plana geçtiyse çalmaya başlama
+  if (document.hidden) {
+    a.pause()
+    _wasPlayingBeforeHide = true
+    return
+  }
   _onPlay?.(url)
 }
 
@@ -63,6 +84,7 @@ export function stopGlobalAudio() {
     _audio = null
   }
   _currentUrl = null
+  _wasPlayingBeforeHide = false
   _onStop?.()
 }
 

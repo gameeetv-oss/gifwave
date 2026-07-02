@@ -97,6 +97,20 @@ export default function GIFCard({ post, onDelete }) {
     return () => clearInterval(iv)
   }, [audioSrc])
 
+  // İlk dokunuşla ses kilidi açılınca ekrandaki müziği hemen başlat
+  useEffect(() => {
+    if (!audioSrc) return
+    function onUnlock() {
+      if (!musicInView || isPlaying()) return
+      playGlobalAudio(audioSrc).then(() => {
+        setAudioPlaying(true)
+        setNeedsTap(false)
+      }).catch(() => {})
+    }
+    window.addEventListener('gifwave-audio-unlocked', onUnlock)
+    return () => window.removeEventListener('gifwave-audio-unlocked', onUnlock)
+  }, [musicInView, audioSrc])
+
   function toggleAudio() {
     if (!audioSrc) return
     if (audioPlaying) {

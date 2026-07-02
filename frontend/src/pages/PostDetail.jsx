@@ -63,19 +63,19 @@ export default function PostDetail() {
   )
 
   return (
-    <div className="max-w-xl mx-auto px-4 py-6">
-      <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-gray-400 hover:text-white mb-4 text-sm">
+    <div className="relative h-screen bg-black overflow-hidden">
+      {post && (
+        <GIFCard
+          post={post}
+          onLikeToggle={fetchPost}
+          onDelete={handleDelete}
+        />
+      )}
+      <button onClick={() => navigate(-1)}
+        className="absolute left-3 z-30 flex items-center gap-1.5 text-white/90 text-sm bg-black/40 backdrop-blur rounded-full px-3 py-1.5"
+        style={{ top: 'calc(env(safe-area-inset-top) + 12px)' }}>
         <ArrowLeft className="w-4 h-4" /> {t('postDetail.back')}
       </button>
-      {post && (
-        <div className="relative h-[600px] rounded-2xl overflow-hidden">
-          <GIFCard
-            post={post}
-            onLikeToggle={fetchPost}
-            onDelete={handleDelete}
-          />
-        </div>
-      )}
     </div>
   )
 }
