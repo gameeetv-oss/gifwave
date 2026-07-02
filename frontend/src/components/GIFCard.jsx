@@ -180,8 +180,13 @@ export default function GIFCard({ post, onDelete }) {
       const res = await fetch(`${BACKEND}/translate?text=${encodeURIComponent(caption)}&target=${target}`)
       const data = await res.json()
       if (data.same_language) { toast(t('gifcard.alreadyInYourLanguage')); setTranslating(false); return }
+      if (data.translated.trim().toLowerCase() === caption.trim().toLowerCase()) {
+        toast(t('gifcard.alreadyInYourLanguage')); setTranslating(false); return
+      }
       setTranslatedCaption(data.translated)
-      setSourceLanguage(i18n.language?.startsWith('tr') ? data.source_name_tr : data.source_name_en)
+      setSourceLanguage(data.source && data.source !== 'und'
+        ? (i18n.language?.startsWith('tr') ? data.source_name_tr : data.source_name_en)
+        : null)
       setShowTranslated(true)
     } catch {
       toast.error(t('gifcard.translateError'))
@@ -243,6 +248,28 @@ export default function GIFCard({ post, onDelete }) {
 
   const caption = currentPost.caption || ''
   const isLongCaption = caption.length > 80
+
+  // Otomatik çeviri: post ekrana gelince caption UI dilinden farklıysa çevir
+  const autoTranslateRef = useRef(false)
+  useEffect(() => {
+    if (!musicInView || autoTranslateRef.current || !caption.trim() || caption.trim().length < 3) return
+    autoTranslateRef.current = true
+    ;(async () => {
+      try {
+        const target = i18n.language?.split('-')[0] || 'tr'
+        const res = await fetch(`${BACKEND}/translate?text=${encodeURIComponent(caption)}&target=${target}`)
+        if (!res.ok) return
+        const data = await res.json()
+        if (data.same_language || !data.translated) return
+        if (data.translated.trim().toLowerCase() === caption.trim().toLowerCase()) return
+        setTranslatedCaption(data.translated)
+        setSourceLanguage(data.source && data.source !== 'und'
+          ? (i18n.language?.startsWith('tr') ? data.source_name_tr : data.source_name_en)
+          : null)
+        setShowTranslated(true)
+      } catch {}
+    })()
+  }, [musicInView])
 
   return (
     <>

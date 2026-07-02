@@ -63,14 +63,14 @@ export default function Feed({ mode = 'all' }) {
           .from('posts')
           .select('*, profiles!fk_posts_profiles(username, display_name, avatar_url, is_verified, show_online_status, is_premium, premium_until)')
           .in('user_id', ids)
-          .order('created_at', { ascending: false })
+          .order('created_at', { ascending: false }).order('id', { ascending: false })
           .range(pageNum * PAGE_SIZE, (pageNum + 1) * PAGE_SIZE - 1)
         data = postsData || []
       } else {
         const { data: postsData } = await supabase
           .from('posts')
           .select('*, profiles!fk_posts_profiles(username, display_name, avatar_url, is_verified, show_online_status, is_premium, premium_until)')
-          .order('created_at', { ascending: false })
+          .order('created_at', { ascending: false }).order('id', { ascending: false })
           .range(pageNum * PAGE_SIZE, (pageNum + 1) * PAGE_SIZE - 1)
         data = postsData || []
       }

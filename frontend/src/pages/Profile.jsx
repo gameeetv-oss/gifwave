@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import {
-  Camera, Loader2, UserPlus, UserMinus, Heart, Repeat2, Grid3x3,
+  Camera, Loader2, UserPlus, UserMinus, Heart, Repeat2, Grid3x3, Music,
   Pencil, Trash2, Check, X, BadgeCheck, MessageSquare, Clock, ShieldOff, Shield, MoreHorizontal,
   Flag, HelpCircle, FolderOpen, LogOut
 } from 'lucide-react'
@@ -578,12 +578,32 @@ export default function Profile() {
           <p className="text-sm">{tab === 'posts' ? t('profile.noPostsYet') : tab === 'reposts' ? t('profile.noRepostsYet') : t('profile.noLikesYet')}</p>
         </div>
       ) : currentItems.length > 0 ? (
-        <div className="space-y-4">
+        <div className="grid grid-cols-3 gap-0.5 sm:gap-1">
           {currentItems.map(post => (
-            <div key={post.id + (post._repost ? '_r' : post._liked ? '_l' : '')} className="relative h-[500px] rounded-2xl overflow-hidden">
-              <GIFCard post={post} showRepostBadge={!!post._repost}
-                onDelete={isMe && tab === 'posts' ? deletePost : undefined} />
-            </div>
+            <Link key={post.id + (post._repost ? '_r' : post._liked ? '_l' : '')}
+              to={`/post/${post.id}`}
+              className="relative aspect-square bg-[#12121e] overflow-hidden group">
+              <img src={post.gif_url} alt={post.caption || 'GIF'}
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                loading="lazy"
+                onError={e => { e.currentTarget.style.opacity = '0.15' }} />
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-1.5 py-1 flex items-center gap-2">
+                <span className="flex items-center gap-0.5 text-white text-[11px] font-semibold drop-shadow">
+                  <Heart className="w-3 h-3 fill-white" /> {post.likes_count || 0}
+                </span>
+                {post.music_url && <Music className="w-3 h-3 text-white drop-shadow" />}
+              </div>
+              {post._repost && (
+                <div className="absolute top-1 right-1 bg-black/60 rounded-full p-1">
+                  <Repeat2 className="w-3 h-3 text-green-400" />
+                </div>
+              )}
+              {post._liked && (
+                <div className="absolute top-1 right-1 bg-black/60 rounded-full p-1">
+                  <Heart className="w-3 h-3 fill-red-500 text-red-500" />
+                </div>
+              )}
+            </Link>
           ))}
         </div>
       ) : null}
