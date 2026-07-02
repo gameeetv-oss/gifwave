@@ -294,6 +294,36 @@ async def extract_music(url: str = Query(...)):
     return {"url": public_url, "title": title}
 
 
+@app.post("/admin/set-music")
+async def admin_set_music(post_id: str = Query(...), admin_key: str = Query(...),
+                          title: str = Query(""), file: UploadFile = File(...)):
+    """Bir postun müziğini yüklenen ses dosyasıyla değiştir (YouTube bot-check bypass için)."""
+    if admin_key != ADMIN_KEY:
+        raise HTTPException(403, "Yetkisiz")
+    if not SUPABASE_SERVICE_KEY:
+        raise HTTPException(500, "SUPABASE_SERVICE_ROLE_KEY eksik")
+    audio_data = await file.read()
+    if len(audio_data) > 60 * 1024 * 1024:
+        raise HTTPException(400, "Dosya çok büyük")
+    ext = (file.filename or "audio.m4a").rsplit(".", 1)[-1].lower()
+    mime_map = {"m4a": "audio/mp4", "webm": "audio/webm", "mp3": "audio/mpeg", "ogg": "audio/ogg"}
+    mime = mime_map.get(ext, "audio/mp4")
+    filename = f"admin_{post_id}_{int(time.time())}.{ext}"
+    async with httpx.AsyncClient(timeout=60) as client:
+        res = await client.post(
+            f"{SUPABASE_URL}/storage/v1/object/music/{filename}",
+            headers={"Authorization": f"Bearer {SUPABASE_SERVICE_KEY}", "Content-Type": mime},
+            content=audio_data,
+        )
+    if res.status_code not in (200, 201):
+        raise HTTPException(500, f"Storage hatası: {res.text[:100]}")
+    public_url = f"{SUPABASE_URL}/storage/v1/object/public/music/{filename}"
+    r = await _sb_update("posts", {"id": post_id}, {"music_url": public_url})
+    if r.status_code not in (200, 201, 204):
+        raise HTTPException(500, f"DB hatası: {r.text[:100]}")
+    return {"url": public_url}
+
+
 @app.post("/admin/migrate-music")
 async def migrate_music(admin_key: str = Query(...)):
     """YouTube linki music_url olan postları kalıcı Supabase ses dosyasına taşı."""
