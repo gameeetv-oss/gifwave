@@ -77,7 +77,7 @@ export default function Register() {
             <div>
               <label className="text-sm text-gray-400 mb-1.5 block">{t('auth.username')}</label>
               <input className="input" placeholder="johndoe" value={username}
-                onChange={e => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))} required />
+                onChange={e => setUsername(e.target.value.normalize('NFKD').replace(/[^\x00-\x7F]/g, '').toLowerCase().replace(/[^a-z0-9_]/g, ''))} required />
             </div>
             <div>
               <label className="text-sm text-gray-400 mb-1.5 block">{t('auth.email')}</label>

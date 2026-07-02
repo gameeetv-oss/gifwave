@@ -5,12 +5,14 @@ import { useAuth } from '../context/AuthContext'
 import {
   Camera, Loader2, UserPlus, UserMinus, Heart, Repeat2, Grid3x3,
   Pencil, Trash2, Check, X, BadgeCheck, MessageSquare, Clock, ShieldOff, Shield, MoreHorizontal,
-  Flag, HelpCircle, FolderOpen
+  Flag, HelpCircle, FolderOpen, LogOut
 } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import GIFCard from '../components/GIFCard'
 import FollowModal from '../components/FollowModal'
 import ReportModal from '../components/ReportModal'
 import ConfirmModal from '../components/ConfirmModal'
+import { usePullToRefresh } from '../hooks/usePullToRefresh'
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://gifwave-backend.onrender.com'
 import { useBlock } from '../context/BlockContext'
@@ -22,7 +24,7 @@ export default function Profile() {
   const { username } = useParams()
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const { user, profile: myProfile, fetchProfile, isPremium } = useAuth()
+  const { user, profile: myProfile, fetchProfile, isPremium, signOut } = useAuth()
 
   const [profile, setProfile]       = useState(null)
   const [tab, setTab]               = useState('posts')
@@ -57,6 +59,8 @@ export default function Profile() {
 
   useEffect(() => { loadProfile() }, [username, user?.id])
 
+  const { pull, refreshing } = usePullToRefresh(null, loadProfile)
+
   useEffect(() => {
     if (tab === 'collections' && isMe && user) loadCollections()
   }, [tab, isMe, user])
@@ -88,6 +92,15 @@ export default function Profile() {
     }
 
     if (!prof) { setLoading(false); return }
+
+    const [{ count: realFollowers }, { count: realFollowing }] = await Promise.all([
+      supabase.from('follows').select('*', { count: 'exact', head: true })
+        .eq('following_id', prof.id),
+      supabase.from('follows').select('*', { count: 'exact', head: true })
+        .eq('follower_id', prof.id),
+    ])
+    prof.followers_count = realFollowers || 0
+    prof.following_count = realFollowing || 0
     setProfile(prof)
     setEditData({ display_name: prof.display_name || '', bio: prof.bio || '', username: prof.username || '', show_online_status: prof.show_online_status !== false })
 
@@ -206,7 +219,7 @@ export default function Profile() {
 
   async function saveProfile() {
     setSaving(true)
-    const newUsername = editData.username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '')
+    const newUsername = editData.username.trim().normalize('NFKD').replace(/[^\x00-\x7F]/g, '').toLowerCase().replace(/[^a-z0-9_]/g, '')
     if (newUsername !== profile.username) {
       if (newUsername.length < 3) { toast.error(t('profile.usernameTooShort')); setSaving(false); return }
       const { data: existing } = await supabase.from('profiles').select('id').eq('username', newUsername).maybeSingle()
@@ -327,6 +340,17 @@ export default function Profile() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8" onClick={() => showMenu && setShowMenu(false)}>
+      {(pull > 0 || refreshing) && (
+        <div
+          className="fixed top-0 inset-x-0 z-40 flex items-center justify-center pointer-events-none"
+          style={{ height: pull, paddingTop: 'env(safe-area-inset-top)' }}
+        >
+          <RefreshCw
+            className={`w-5 h-5 text-white ${refreshing ? 'animate-spin' : ''}`}
+            style={{ transform: refreshing ? 'none' : `rotate(${pull * 3}deg)` }}
+          />
+        </div>
+      )}
       <div className="card p-6 mb-6">
         <div className="flex items-start gap-5">
           {/* Avatar */}
@@ -358,7 +382,7 @@ export default function Profile() {
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">@</span>
                       <input className="input text-sm pl-7" placeholder={t('profile.usernamePlaceholder')}
                         value={editData.username}
-                        onChange={e => setEditData(d => ({ ...d, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') }))} />
+                        onChange={e => setEditData(d => ({ ...d, username: e.target.value.normalize('NFKD').replace(/[^\x00-\x7F]/g, '').toLowerCase().replace(/[^a-z0-9_]/g, '') }))} />
                     </div>
                     <textarea className="input text-sm resize-none" rows={2} placeholder={t('profile.biographyPlaceholder')}
                       value={editData.bio} onChange={e => setEditData(d => ({ ...d, bio: e.target.value }))} />
@@ -439,6 +463,10 @@ export default function Profile() {
                     <button onClick={() => window.open('mailto:support@gifwave.app?subject=Support Request')}
                       className="btn-ghost text-sm flex items-center gap-1.5 text-gray-500 hover:text-gray-300">
                       <HelpCircle className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={signOut}
+                      className="btn-ghost text-sm flex items-center gap-1.5 text-red-400 hover:text-red-300">
+                      <LogOut className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 ) : user && (

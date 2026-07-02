@@ -289,7 +289,9 @@
     "invalidCode": "Invalid code",
     "paymentNotFound": "Payment not found",
     "whopTab": "Whop",
-    "codeTab": "Activation Code"
+    "codeTab": "Activation Code",
+    "storeLoading": "Loading store...",
+    "storeUnavailable": "Store is unavailable right now. Please try again later."
   },
   "notifications": {
     "title": "Notifications",

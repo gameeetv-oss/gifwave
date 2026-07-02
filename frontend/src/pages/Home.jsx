@@ -9,7 +9,10 @@ export default function Home() {
   return (
     <div className="h-screen overflow-hidden relative bg-black">
       {/* Üstte overlay tab seçici */}
-      <div className="absolute top-0 inset-x-0 z-20 flex justify-center pt-4 pb-6 bg-gradient-to-b from-black/60 to-transparent pointer-events-none">
+      <div
+        className="absolute top-0 inset-x-0 z-20 flex justify-center pb-6 bg-gradient-to-b from-black/60 to-transparent pointer-events-none"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}
+      >
         <div className="flex items-center gap-6 pointer-events-auto">
           <button
             onClick={() => setTab('following')}

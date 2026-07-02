@@ -1,0 +1,48 @@
+workflows:
+  ios-workflow:
+    name: GifWave iOS App Store
+    max_build_duration: 60
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.gifwave.app
+      node: 20.11.0
+      vars:
+        BUNDLE_ID: "com.gifwave.app"
+        XCODE_PROJECT: "ios/App/App.xcodeproj"
+        XCODE_SCHEME: "App"
+        APP_STORE_CONNECT_KEY_IDENTIFIER: JSVMKJLAL2
+        APP_STORE_CONNECT_ISSUER_ID: 8ff21934-c032-4267-973c-66d15b94fd65
+        APP_STORE_APPLE_ID: 6769895680
+    scripts:
+      - name: Install dependencies
+        script: npm install
+      - name: Build web app
+        script: npm run build
+      - name: Capacitor sync
+        script: npx cap sync ios
+      - name: Set build number
+        script: |
+          BUILD_NUMBER=$PROJECT_BUILD_NUMBER
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" ios/App/App/Info.plist
+      - name: Build iOS
+        script: |
+          xcode-project use-profiles
+          xcodebuild \
+            -project $XCODE_PROJECT \
+            -scheme $XCODE_SCHEME \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath build/App.xcarchive \
+            archive \
+            OTHER_CODE_SIGN_FLAGS="--keychain $(keychain path)"
+    artifacts:
+      - build/App.xcarchive
+      - "**/*.ipa"
+      - "**/*.dSYM.zip"
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: false
+        submit_to_app_store: true
+        release_type: MANUAL

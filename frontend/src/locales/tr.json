@@ -289,7 +289,9 @@
     "invalidCode": "Geçersiz kod",
     "paymentNotFound": "Ödeme bulunamadı",
     "whopTab": "Whop",
-    "codeTab": "Aktivasyon Kodu"
+    "codeTab": "Aktivasyon Kodu",
+    "storeLoading": "Mağaza yükleniyor...",
+    "storeUnavailable": "Şu anda mağazaya bağlanılamıyor. Lütfen birazdan tekrar dene."
   },
   "notifications": {
     "title": "Bildirimler",

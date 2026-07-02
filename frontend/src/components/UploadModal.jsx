@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { X, Upload, Search, Video, Loader2, Check, Music, Trash2, Camera, StopCircle, Image, FlipHorizontal, Type, Circle } from 'lucide-react'
+import { X, Upload, Search, Video, Loader2, Check, Music, Trash2, Camera, Image, Type } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
@@ -105,17 +105,13 @@ export default function UploadModal({ onClose, onSuccess }) {
   const [convertedGif, setConvertedGif] = useState(null)
   const [convertLoading, setConvertLoading] = useState(false)
 
-  const cameraVideoRef = useRef()
-  const streamRef = useRef(null)
-  const recorderRef = useRef(null)
-  const chunksRef = useRef([])
-  const [cameraActive, setCameraActive] = useState(false)
-  const [recording, setRecording] = useState(false)
+  // Kamera: getUserMedia/MediaRecorder iOS WKWebView'da crash yapıyordu.
+  // Native file input (capture) iOS'un kendi kamerasını açar — güvenilir yol.
+  const cameraPhotoInputRef = useRef()
+  const cameraVideoInputRef = useRef()
   const [cameraVideoFile, setCameraVideoFile] = useState(null)
   const [cameraConverted, setCameraConverted] = useState(null)
   const [cameraConvertLoading, setCameraConvertLoading] = useState(false)
-  const [countdown, setCountdown] = useState(0)
-  const [facingMode, setFacingMode] = useState('environment')
   const [capturedPhoto, setCapturedPhoto] = useState(null)
   const [cameraMode, setCameraMode] = useState('video')
 
@@ -132,14 +128,6 @@ export default function UploadModal({ onClose, onSuccess }) {
     center: t('upload.posCenter'),
     bottom: t('upload.posBottom')
   }
-
-  useEffect(() => {
-    return () => stopCamera()
-  }, [])
-
-  useEffect(() => {
-    if (tab !== 'camera') stopCamera()
-  }, [tab])
 
   function handleFileSelect(e) {
     const file = e.target.files[0]
@@ -178,73 +166,19 @@ export default function UploadModal({ onClose, onSuccess }) {
     finally { setConvertLoading(false) }
   }
 
-  async function startCamera(mode) {
-    const facing = mode || facingMode
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing }, audio: false })
-      streamRef.current = stream
-      cameraVideoRef.current.srcObject = stream
-      await cameraVideoRef.current.play()
-      setCameraActive(true)
-    } catch { toast.error(t('upload.cameraUnavailable')) }
+  function handleCameraPhoto(e) {
+    const file = e.target.files[0]
+    e.target.value = ''
+    if (!file) return
+    setCapturedPhoto({ blob: file, url: URL.createObjectURL(file) })
   }
 
-  async function flipCamera() {
-    const newMode = facingMode === 'environment' ? 'user' : 'environment'
-    setFacingMode(newMode)
-    stopCamera()
-    setTimeout(() => startCamera(newMode), 100)
-  }
-
-  function stopCamera() {
-    streamRef.current?.getTracks().forEach(t => t.stop())
-    streamRef.current = null
-    if (cameraVideoRef.current) cameraVideoRef.current.srcObject = null
-    setCameraActive(false)
-    setRecording(false)
-  }
-
-  function takePhoto() {
-    const video = cameraVideoRef.current
-    if (!video) return
-    const canvas = document.createElement('canvas')
-    canvas.width = video.videoWidth || 640
-    canvas.height = video.videoHeight || 480
-    canvas.getContext('2d').drawImage(video, 0, 0)
-    canvas.toBlob(blob => {
-      setCapturedPhoto({ blob, url: URL.createObjectURL(blob) })
-      stopCamera()
-    }, 'image/jpeg', 0.92)
-  }
-
-  function startRecording() {
-    if (!streamRef.current) return
-    chunksRef.current = []
-    const recorder = new MediaRecorder(streamRef.current, { mimeType: 'video/webm' })
-    recorder.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data) }
-    recorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: 'video/webm' })
-      setCameraVideoFile(new File([blob], 'camera.webm', { type: 'video/webm' }))
-      stopCamera()
-    }
-    recorder.start()
-    recorderRef.current = recorder
-    setRecording(true)
-    let sec = 10
-    setCountdown(sec)
-    const interval = setInterval(() => {
-      sec--
-      setCountdown(sec)
-      if (sec <= 0) { clearInterval(interval); stopRecording() }
-    }, 1000)
-  }
-
-  function stopRecording() {
-    if (recorderRef.current?.state === 'recording') {
-      recorderRef.current.stop()
-    }
-    setRecording(false)
-    setCountdown(0)
+  function handleCameraVideo(e) {
+    const file = e.target.files[0]
+    e.target.value = ''
+    if (!file) return
+    if (file.size > 50 * 1024 * 1024) { toast.error(t('upload.videoMaxSize')); return }
+    setCameraVideoFile(file)
   }
 
   async function convertCameraVideo() {
@@ -278,23 +212,48 @@ export default function UploadModal({ onClose, onSuccess }) {
       setMusicUrl(data.url); setMusicFileName(data.title || t('gifcard.ytTitle'))
       toast.success(t('upload.musicAdded'))
     } catch {
+      // Extract başarısız olsa da GIFCard artık YouTube linkini backend /music/proxy ile çalıyor
       setMusicUrl(trimmed); setMusicFileName(t('gifcard.ytTitle'))
-      toast(t('upload.musicAddedDesktop'), { icon: '🎵' })
+      toast.success(t('upload.musicAdded'))
     } finally { setMusicUploading(false); setYtInput('') }
   }
 
   async function handleMusicSelect(e) {
     const file = e.target.files[0]
     if (!file) return
-    if (!file.type.startsWith('audio/')) { toast.error(t('upload.audioFile')); return }
-    if (file.size > 15 * 1024 * 1024) { toast.error(t('upload.maxAudioSize')); return }
+    const isAudio = file.type.startsWith('audio/')
+    const isVideo = file.type.startsWith('video/')
+    if (!isAudio && !isVideo) { toast.error(t('upload.audioFile')); return }
+    if (file.size > 50 * 1024 * 1024) { toast.error(t('upload.maxAudioSize')); return }
     setMusicUploading(true)
-    const path = `${user.id}/${Date.now()}_${file.name}`
-    const { error } = await supabase.storage.from('music').upload(path, file, { contentType: file.type })
-    if (error) { toast.error(t('upload.musicUploadError')); setMusicUploading(false); return }
-    const { data: { publicUrl } } = supabase.storage.from('music').getPublicUrl(path)
-    setMusicUrl(publicUrl); setMusicFileName(file.name)
-    setMusicUploading(false); toast.success(t('upload.musicUploaded'))
+    try {
+      let uploadFile = file
+      let uploadName = file.name
+      let contentType = file.type
+
+      if (isVideo) {
+        const form = new FormData()
+        form.append('file', file)
+        const res = await fetch(`${BACKEND_URL}/extract-audio`, { method: 'POST', body: form })
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}))
+          throw new Error(errData.detail || t('upload.musicUploadError'))
+        }
+        const audioBlob = await res.blob()
+        uploadFile = audioBlob
+        uploadName = file.name.replace(/\.[^/.]+$/, '') + '.mp3'
+        contentType = 'audio/mpeg'
+      }
+
+      const path = `${user.id}/${Date.now()}_${uploadName}`
+      const { error } = await supabase.storage.from('music').upload(path, uploadFile, { contentType })
+      if (error) { toast.error(t('upload.musicUploadError')); return }
+      const { data: { publicUrl } } = supabase.storage.from('music').getPublicUrl(path)
+      setMusicUrl(publicUrl); setMusicFileName(uploadName)
+      toast.success(t('upload.musicUploaded'))
+    } catch (err) {
+      toast.error(err.message || t('upload.musicUploadError'))
+    } finally { setMusicUploading(false) }
   }
 
   async function publish() {
@@ -335,8 +294,10 @@ export default function UploadModal({ onClose, onSuccess }) {
         gifUrl = publicUrl; source = 'converted'
       } else if (tab === 'camera') {
         if (capturedPhoto) {
-          const path = `${user.id}/${Date.now()}.jpg`
-          const { error: upErr } = await supabase.storage.from('gifs').upload(path, capturedPhoto.blob, { contentType: 'image/jpeg' })
+          const photoType = capturedPhoto.blob.type || 'image/jpeg'
+          const photoExt = photoType.includes('png') ? 'png' : photoType.includes('heic') ? 'heic' : 'jpg'
+          const path = `${user.id}/${Date.now()}.${photoExt}`
+          const { error: upErr } = await supabase.storage.from('gifs').upload(path, capturedPhoto.blob, { contentType: photoType })
           if (upErr) throw upErr
           const { data: { publicUrl } } = supabase.storage.from('gifs').getPublicUrl(path)
           gifUrl = publicUrl; source = 'photo'
@@ -426,72 +387,34 @@ export default function UploadModal({ onClose, onSuccess }) {
             </div>
           )}
 
-          {/* Camera Tab */}
+          {/* Camera Tab — native iOS/Android kamera (input capture) */}
           {tab === 'camera' && (
             <div className="space-y-3">
-              {!cameraActive && !cameraVideoFile && !cameraConverted && !capturedPhoto && (
-                <div className="flex rounded-xl overflow-hidden border border-[#3a3a5c]">
-                  <button onClick={() => setCameraMode('photo')}
-                    className={`flex-1 py-2 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${cameraMode === 'photo' ? 'bg-brand-500 text-white' : 'text-gray-400 hover:text-white'}`}>
-                    <Image className="w-3.5 h-3.5" /> {t('upload.photo')}
-                  </button>
-                  <button onClick={() => setCameraMode('video')}
-                    className={`flex-1 py-2 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${cameraMode === 'video' ? 'bg-brand-500 text-white' : 'text-gray-400 hover:text-white'}`}>
-                    <Video className="w-3.5 h-3.5" /> {t('upload.videoToGif')}
-                  </button>
-                </div>
-              )}
-              <div className="relative bg-black rounded-xl overflow-hidden aspect-video">
-                <video ref={cameraVideoRef} className="w-full h-full object-cover" muted playsInline />
-                {!cameraActive && !cameraVideoFile && !capturedPhoto && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <button onClick={() => startCamera()}
-                      className="flex flex-col items-center gap-2 text-gray-400 hover:text-white transition-colors">
-                      <Camera className="w-12 h-12" />
-                      <span className="text-sm">{t('upload.openCamera')}</span>
+              <input ref={cameraPhotoInputRef} type="file" accept="image/*" capture="environment"
+                className="hidden" onChange={handleCameraPhoto} />
+              <input ref={cameraVideoInputRef} type="file" accept="video/*" capture="environment"
+                className="hidden" onChange={handleCameraVideo} />
+              {!cameraVideoFile && !cameraConverted && !capturedPhoto && (
+                <>
+                  <div className="flex rounded-xl overflow-hidden border border-[#3a3a5c]">
+                    <button onClick={() => setCameraMode('photo')}
+                      className={`flex-1 py-2 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${cameraMode === 'photo' ? 'bg-brand-500 text-white' : 'text-gray-400 hover:text-white'}`}>
+                      <Image className="w-3.5 h-3.5" /> {t('upload.photo')}
+                    </button>
+                    <button onClick={() => setCameraMode('video')}
+                      className={`flex-1 py-2 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${cameraMode === 'video' ? 'bg-brand-500 text-white' : 'text-gray-400 hover:text-white'}`}>
+                      <Video className="w-3.5 h-3.5" /> {t('upload.videoToGif')}
                     </button>
                   </div>
-                )}
-                {capturedPhoto && (
-                  <img src={capturedPhoto.url} alt="foto" className="absolute inset-0 w-full h-full object-cover" />
-                )}
-                {cameraActive && !recording && (
-                  <button onClick={flipCamera}
-                    className="absolute top-3 right-3 bg-black/60 rounded-full p-2 text-white hover:bg-black/80 transition-colors">
-                    <FlipHorizontal className="w-5 h-5" />
-                  </button>
-                )}
-                {recording && countdown > 0 && (
-                  <div className="absolute top-3 right-3 bg-red-500 text-white text-sm font-bold rounded-full w-8 h-8 flex items-center justify-center">
-                    {countdown}
+                  <div onClick={() => (cameraMode === 'photo' ? cameraPhotoInputRef : cameraVideoInputRef).current?.click()}
+                    className="border-2 border-dashed border-[#3a3a5c] rounded-xl p-12 text-center cursor-pointer hover:border-brand-500 transition-colors group">
+                    <Camera className="w-12 h-12 text-gray-500 mx-auto mb-3 group-hover:text-brand-400 transition-colors" />
+                    <p className="text-gray-400 text-sm">{t('upload.openCamera')}</p>
+                    <p className="text-gray-600 text-xs mt-1">
+                      {cameraMode === 'photo' ? t('upload.takePhoto') : t('upload.videoToGif')}
+                    </p>
                   </div>
-                )}
-                {recording && (
-                  <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-black/60 rounded-full px-2 py-1">
-                    <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                    <span className="text-white text-xs">{t('upload.recording')}</span>
-                  </div>
-                )}
-                {cameraConverted && <OverlayPreview textOverlay={textOverlay} showTextOverlay={showTextOverlay} textSize={textSize} textColor={textColor} textPos={textPos} textBold={textBold} />}
-              </div>
-
-              {cameraActive && !recording && cameraMode === 'photo' && (
-                <button onClick={takePhoto}
-                  className="w-full btn-primary py-3 flex items-center justify-center gap-2">
-                  <Circle className="w-4 h-4 fill-white" /> {t('upload.takePhoto')}
-                </button>
-              )}
-              {cameraActive && !recording && cameraMode === 'video' && (
-                <button onClick={startRecording}
-                  className="w-full btn-primary py-3 flex items-center justify-center gap-2">
-                  <div className="w-3 h-3 bg-red-400 rounded-full" /> {t('upload.startRecording')}
-                </button>
-              )}
-              {recording && (
-                <button onClick={stopRecording}
-                  className="w-full bg-red-500 hover:bg-red-600 text-white py-3 rounded-xl flex items-center justify-center gap-2 transition-colors">
-                  <StopCircle className="w-4 h-4" /> {t('upload.stopRecording')}
-                </button>
+                </>
               )}
               {capturedPhoto && (
                 <div className="space-y-2">
@@ -513,12 +436,21 @@ export default function UploadModal({ onClose, onSuccess }) {
                 </div>
               )}
               {cameraVideoFile && !cameraConverted && (
-                <button onClick={convertCameraVideo} disabled={cameraConvertLoading}
-                  className="w-full btn-primary py-3 flex items-center justify-center gap-2">
-                  {cameraConvertLoading
-                    ? <><Loader2 className="w-4 h-4 animate-spin" /> {t('upload.converting')}</>
-                    : <><Video className="w-4 h-4" /> {t('upload.convertToGif')}</>}
-                </button>
+                <div className="space-y-2">
+                  <div className="relative">
+                    <video src={URL.createObjectURL(cameraVideoFile)} className="w-full rounded-xl max-h-60 bg-black/20" controls playsInline />
+                    <button onClick={() => setCameraVideoFile(null)}
+                      className="absolute top-2 right-2 bg-black/60 rounded-full p-1 text-white">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <button onClick={convertCameraVideo} disabled={cameraConvertLoading}
+                    className="w-full btn-primary py-3 flex items-center justify-center gap-2">
+                    {cameraConvertLoading
+                      ? <><Loader2 className="w-4 h-4 animate-spin" /> {t('upload.converting')}</>
+                      : <><Video className="w-4 h-4" /> {t('upload.convertToGif')}</>}
+                  </button>
+                </div>
               )}
               {cameraConverted && (
                 <div className="space-y-2">
@@ -620,7 +552,7 @@ export default function UploadModal({ onClose, onSuccess }) {
           <div className="space-y-3 pt-2">
             <input className="input" placeholder={t('upload.caption')} value={caption} onChange={e => setCaption(e.target.value)} />
             <input className="input" placeholder={t('upload.tags')} value={tags} onChange={e => setTags(e.target.value)} />
-            <input ref={musicFileRef} type="file" accept="audio/*" className="hidden" onChange={handleMusicSelect} />
+            <input ref={musicFileRef} type="file" accept="audio/*,video/*" className="hidden" onChange={handleMusicSelect} />
             {musicFileName ? (
               <div className="flex items-center gap-3 bg-[#1a1a2e] border border-brand-500/30 rounded-xl px-3 py-2">
                 <Music className="w-4 h-4 text-brand-400 flex-shrink-0" />

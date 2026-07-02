@@ -18,7 +18,7 @@ export default function Premium({ onClose }) {
   const [email, setEmail] = useState('')
   const [webLoading, setWebLoading] = useState(false)
 
-  const { isNative, offering, loading: rcLoading, purchasePremium, restorePurchases } = usePurchases(user?.id)
+  const { isNative, offering, initialized, loading: rcLoading, purchasePremium, restorePurchases } = usePurchases(user?.id)
 
   const isPremium = profile?.is_premium && (!profile?.premium_until || new Date(profile.premium_until) > new Date())
   const price = offering?.availablePackages?.[0]?.product?.priceString || `₺${PRICE_TRY}/ay`
@@ -45,6 +45,7 @@ export default function Premium({ onClose }) {
   }
 
   async function handleRestore() {
+    if (!window.confirm(t('premium.restoreConfirm', { defaultValue: 'Geçmiş satın almalarınızı geri yüklemek istediğinize emin misiniz?' }))) return
     try {
       const result = await restorePurchases()
       if (result) {
@@ -102,11 +103,19 @@ export default function Premium({ onClose }) {
 
         {/* Header */}
         <div className="relative p-6 bg-gradient-to-br from-yellow-500/20 via-brand-500/10 to-transparent rounded-t-2xl">
-          {onClose && (
-            <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-white">
-              <X className="w-5 h-5" />
-            </button>
-          )}
+          <div className="absolute top-4 right-4 flex items-center gap-3">
+            {!isPremium && (
+              <button onClick={handleRestore} title={t('premium.restore')}
+                className="text-gray-400 hover:text-white flex items-center gap-1 text-xs">
+                <RefreshCw className="w-4 h-4" />
+              </button>
+            )}
+            {onClose && (
+              <button onClick={onClose} className="text-gray-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            )}
+          </div>
           <div className="flex items-center gap-3 mb-2">
             <Crown className="w-8 h-8 text-yellow-400" />
             <div>
@@ -143,35 +152,28 @@ export default function Premium({ onClose }) {
         {!isPremium && (
           <div className="p-5 space-y-4">
 
-            {/* === ANDROID: Google Play Billing === */}
+            {/* === NATIVE (iOS/Android): IAP only — promo code activation removed for Apple 3.1.1 compliance === */}
             {isNative ? (
               <div className="space-y-3">
+                {!initialized && !rcLoading && (
+                  <div className="text-xs text-gray-400 text-center py-2">
+                    {t('premium.storeLoading')}
+                  </div>
+                )}
+                {initialized && !offering && (
+                  <div className="text-xs text-yellow-400 text-center bg-yellow-500/10 border border-yellow-500/20 rounded-lg px-3 py-2">
+                    {t('premium.storeUnavailable')}
+                  </div>
+                )}
                 <button
                   onClick={handleNativePurchase}
-                  disabled={rcLoading}
-                  className="btn-primary w-full py-3 flex items-center justify-center gap-2 text-sm font-bold">
+                  disabled={rcLoading || !initialized || !offering}
+                  className="btn-primary w-full py-3 flex items-center justify-center gap-2 text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ touchAction: 'manipulation' }}>
                   {rcLoading
                     ? <Loader2 className="w-4 h-4 animate-spin" />
                     : <><Crown className="w-4 h-4" /> {t('premium.subscribe')} — {price}</>}
                 </button>
-                <button
-                  onClick={handleRestore}
-                  className="w-full text-xs text-gray-500 hover:text-gray-300 flex items-center justify-center gap-1 py-1">
-                  <RefreshCw className="w-3 h-3" /> {t('premium.restore')}
-                </button>
-
-                <div className="border-t border-[#2a2a3f] pt-3 space-y-2">
-                  <p className="text-xs text-gray-500 text-center">{t('premium.activateCode')}</p>
-                  <div className="flex gap-2">
-                    <input className="input flex-1 text-sm py-2 font-mono tracking-wider uppercase"
-                      placeholder={t('premium.codePlaceholder')} value={code}
-                      onChange={e => setCode(e.target.value.toUpperCase())} />
-                    <button onClick={activateWithCode} disabled={webLoading || !code.trim()}
-                      className="btn-primary px-4 py-2 text-sm flex-shrink-0 flex items-center gap-1">
-                      {webLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Gift className="w-4 h-4" /> {t('premium.apply')}</>}
-                    </button>
-                  </div>
-                </div>
               </div>
 
             ) : (

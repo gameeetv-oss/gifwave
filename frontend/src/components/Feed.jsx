@@ -1,10 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { useInView } from 'react-intersection-observer'
+import { RefreshCw } from 'lucide-react'
+import toast from 'react-hot-toast'
 import GIFCard from './GIFCard'
+import ConfirmModal from './ConfirmModal'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useBlock } from '../context/BlockContext'
 import { useTranslation } from 'react-i18next'
+import { usePullToRefresh } from '../hooks/usePullToRefresh'
 
 const AD_EVERY = 5
 const ANDROID_INTERSTITIAL_ID = 'ca-app-pub-4416578432335144/9595174249'
@@ -31,9 +35,18 @@ export default function Feed({ mode = 'all' }) {
   const [posts, setPosts] = useState([])
   const [hasMore, setHasMore] = useState(true)
   const [loading, setLoading] = useState(false)
+  const [deleteId, setDeleteId] = useState(null)
   const pageRef = useRef(0)
   const loadingRef = useRef(false)
+  const scrollRef = useRef(null)
   const { ref, inView } = useInView({ threshold: 0.1 })
+
+  async function refresh() {
+    pageRef.current = 0
+    setHasMore(true)
+    await loadPosts(0, true)
+  }
+  const { pull, refreshing } = usePullToRefresh(scrollRef, refresh)
 
   async function loadPosts(pageNum, reset = false) {
     if (loadingRef.current) return
@@ -86,6 +99,19 @@ export default function Feed({ mode = 'all' }) {
     }
   }
 
+  function deletePost(postId) {
+    setDeleteId(postId)
+  }
+
+  async function executeDeletePost() {
+    const postId = deleteId
+    setDeleteId(null)
+    if (!postId || !user) return
+    const { error } = await supabase.from('posts').delete().eq('id', postId).eq('user_id', user.id)
+    if (!error) { setPosts(prev => prev.filter(p => p.id !== postId)); toast.success(t('profile.postDeleted')) }
+    else toast.error(t('profile.postDeleteError'))
+  }
+
   useEffect(() => {
     pageRef.current = 0
     setPosts([])
@@ -111,14 +137,25 @@ export default function Feed({ mode = 'all' }) {
 
   return (
     <div
-      className="h-screen overflow-y-scroll snap-y snap-mandatory"
+      ref={scrollRef}
+      className="h-screen overflow-y-scroll snap-y snap-mandatory relative"
       style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
     >
-      {posts.map((post, index) => (
+      {(pull > 0 || refreshing) && (
+        <div
+          className="absolute top-0 inset-x-0 z-30 flex items-center justify-center pointer-events-none"
+          style={{ height: pull, paddingTop: 'env(safe-area-inset-top)' }}
+        >
+          <RefreshCw
+            className={`w-5 h-5 text-white ${refreshing ? 'animate-spin' : ''}`}
+            style={{ transform: refreshing ? 'none' : `rotate(${pull * 3}deg)` }}
+          />
+        </div>
+      )}
+      {posts.map((post) => (
         <div key={post.id} className="h-screen snap-start snap-always flex-shrink-0"
-          onFocus={() => {}}
           ref={el => {
-            if (!el) return
+            if (!el || el._adObserver) return
             const observer = new IntersectionObserver(([entry]) => {
               if (entry.isIntersecting && !isPremium) {
                 adCounterRef.current++
@@ -126,8 +163,9 @@ export default function Feed({ mode = 'all' }) {
               }
             }, { threshold: 0.8 })
             observer.observe(el)
+            el._adObserver = observer
           }}>
-          <GIFCard post={post} />
+          <GIFCard post={post} onDelete={deletePost} />
         </div>
       ))}
       <div ref={ref} className="snap-start h-4" />
@@ -140,6 +178,15 @@ export default function Feed({ mode = 'all' }) {
         <div className="h-screen snap-start flex items-center justify-center">
           <p className="text-gray-500 text-sm">{t('feed.allSeen')}</p>
         </div>
+      )}
+      {deleteId && (
+        <ConfirmModal
+          title={t('profile.deletePostConfirm')}
+          confirmLabel={t('common.delete')}
+          danger
+          onConfirm={executeDeletePost}
+          onCancel={() => setDeleteId(null)}
+        />
       )}
     </div>
   )

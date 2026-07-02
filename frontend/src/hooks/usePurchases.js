@@ -27,9 +27,10 @@ export function usePurchases(userId) {
         await Purchases.configure({ apiKey: RC_API_KEY, appUserID: userId })
         const { current } = await Purchases.getOfferings()
         if (!cancelled && current) setOffering(current)
-        setInitialized(true)
       } catch (e) {
         console.error('[RC] init error:', e)
+      } finally {
+        if (!cancelled) setInitialized(true)
       }
     }
     init()

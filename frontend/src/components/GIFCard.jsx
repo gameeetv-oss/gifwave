@@ -13,20 +13,6 @@ import { useTranslation } from 'react-i18next'
 
 const BACKEND = import.meta.env.VITE_BACKEND_URL || 'https://gifwave-backend.onrender.com'
 
-const isMobile = typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0
-
-function loadYTApi() {
-  if (window.YT && window.YT.Player) return Promise.resolve()
-  if (window._ytApiPromise) return window._ytApiPromise
-  window._ytApiPromise = new Promise(resolve => {
-    const script = document.createElement('script')
-    script.src = 'https://www.youtube.com/iframe_api'
-    document.head.appendChild(script)
-    window.onYouTubeIframeAPIReady = resolve
-  })
-  return window._ytApiPromise
-}
-
 export default function GIFCard({ post, onDelete }) {
   const { user, profile: myProfile } = useAuth()
   const { onlineUsers } = usePresence()
@@ -69,81 +55,22 @@ export default function GIFCard({ post, onDelete }) {
   }, [post.id])
 
   // ── Müzik ──────────────────────────────────────────────────
-  const audioRef = useRef(null)
-  const ytContainerRef = useRef(null)
-  const ytPlayerRef = useRef(null)
-  const userStartedRef = useRef(false)
+  // YouTube iframe yok: eski YouTube linkli postlar backend /music/proxy
+  // üzerinden, diğerleri direkt URL ile HTML5 Audio (globalAudio) çalar.
   const { ref: musicRef, inView: musicInView } = useInView({ threshold: 0.6 })
   const ytMusicId = currentPost.music_url ? getYouTubeId(currentPost.music_url) : null
-  const [ytReady, setYtReady] = useState(false)
-  const [ytPlaying, setYtPlaying] = useState(false)
-  const [ytTitle, setYtTitle] = useState(t('gifcard.ytTitle'))
-  const [ytMounted, setYtMounted] = useState(false)
-  const [audioSrc, setAudioSrc] = useState(null)
+  const audioSrc = currentPost.music_url
+    ? (ytMusicId ? `${BACKEND}/music/proxy?url=${encodeURIComponent(currentPost.music_url)}` : currentPost.music_url)
+    : null
+  const [musicTitle, setMusicTitle] = useState(null)
   const [audioPlaying, setAudioPlaying] = useState(false)
   const [needsTap, setNeedsTap] = useState(false)
 
   useEffect(() => {
-    if (musicInView && ytMusicId && !ytMounted) setYtMounted(true)
-  }, [musicInView, ytMusicId])
-
-  useEffect(() => {
-    if (!ytMusicId) return
+    if (!ytMusicId) { setMusicTitle(null); return }
     fetch(`https://www.youtube.com/oembed?url=https://youtube.com/watch?v=${ytMusicId}&format=json`)
-      .then(r => r.json()).then(d => { if (d.title) setYtTitle(d.title) }).catch(() => {})
+      .then(r => r.json()).then(d => { if (d.title) setMusicTitle(d.title) }).catch(() => {})
   }, [ytMusicId])
-
-  useEffect(() => {
-    if (!ytMounted || !ytMusicId || !ytContainerRef.current) return
-    let player
-    loadYTApi().then(() => {
-      if (!ytContainerRef.current) return
-      player = new window.YT.Player(ytContainerRef.current, {
-        width: '200', height: '112', videoId: ytMusicId,
-        playerVars: { autoplay: isMobile ? 0 : 1, mute: 1, controls: 0, playsinline: 1, rel: 0, modestbranding: 1 },
-        events: {
-          onReady: () => { ytPlayerRef.current = player; setYtReady(true) },
-          onStateChange: (e) => { setYtPlaying(e.data === 1) },
-        },
-      })
-    })
-    return () => {
-      if (ytPlayerRef.current) {
-        try { ytPlayerRef.current.destroy() } catch {}
-        ytPlayerRef.current = null; setYtReady(false); setYtPlaying(false)
-      }
-    }
-  }, [ytMounted, ytMusicId])
-
-  useEffect(() => {
-    const p = ytPlayerRef.current
-    if (!ytReady || !p) return
-    if (musicInView) {
-      try { p.unMute(); p.setVolume(100); p.playVideo() } catch {}
-      setYtPlaying(true)
-      setNeedsTap(false)
-    } else {
-      try { p.mute(); p.pauseVideo() } catch {}
-      setYtPlaying(false)
-    }
-  }, [musicInView, ytReady])
-
-  function toggleYt() {
-    const p = ytPlayerRef.current
-    if (!p) return
-    userStartedRef.current = true
-    setNeedsTap(false)
-    if (ytPlaying) {
-      try { p.mute(); p.pauseVideo() } catch {}; setYtPlaying(false)
-    } else {
-      try { p.unMute(); p.setVolume(100); p.playVideo() } catch {}; setYtPlaying(true)
-    }
-  }
-
-  useEffect(() => {
-    if (!currentPost.music_url || ytMusicId) return
-    setAudioSrc(currentPost.music_url)
-  }, [currentPost.id])
 
   useEffect(() => {
     if (!audioSrc) return
@@ -330,6 +257,7 @@ export default function GIFCard({ post, onDelete }) {
           alt={currentPost.caption || 'GIF'}
           className="absolute inset-0 w-full h-full object-contain"
           loading="lazy"
+          onError={e => { e.currentTarget.style.opacity = '0.15'; e.currentTarget.src = '/gifwave_icon_1024.png' }}
         />
 
         {/* Metin overlay */}
@@ -403,39 +331,19 @@ export default function GIFCard({ post, onDelete }) {
           )}
 
           {/* Müzik */}
-          {currentPost.music_url && (
-            <div>
-              {ytMounted && (
-                <div ref={ytContainerRef}
-                  style={{ position: 'fixed', left: '-400px', top: '50%', width: '200px', height: '112px', pointerEvents: 'none' }} />
-              )}
-              {ytMusicId ? (
-                <button onClick={toggleYt}
-                  className="flex items-center gap-2 bg-white/10 backdrop-blur rounded-full px-3 py-1.5 w-fit">
-                  {needsTap
-                    ? <VolumeX className="w-3.5 h-3.5 text-white animate-pulse" />
-                    : ytPlaying
-                    ? <Pause className="w-3.5 h-3.5 text-white" />
-                    : <Play className="w-3.5 h-3.5 text-white fill-white" />}
-                  <Music className={`w-3.5 h-3.5 text-white ${ytPlaying ? 'animate-spin' : ''}`} style={{ animationDuration: '3s' }} />
-                  <span className="text-white text-xs max-w-[160px] truncate">{needsTap ? t('gifcard.tapForSound') : ytTitle}</span>
-                  {!ytReady && <Loader2 className="w-3 h-3 text-white/60 animate-spin" />}
-                </button>
-              ) : audioSrc ? (
-                <>
-                  <button onClick={toggleAudio}
-                    className="flex items-center gap-2 bg-white/10 backdrop-blur rounded-full px-3 py-1.5 w-fit">
-                    {needsTap
-                      ? <VolumeX className="w-3.5 h-3.5 text-white animate-pulse" />
-                      : audioPlaying
-                      ? <Pause className="w-3.5 h-3.5 text-white" />
-                      : <Play className="w-3.5 h-3.5 text-white fill-white" />}
-                    <Music className={`w-3.5 h-3.5 text-white ${audioPlaying ? 'animate-spin' : ''}`} style={{ animationDuration: '3s' }} />
-                    <span className="text-white text-xs">{needsTap ? t('gifcard.tapForSound') : audioPlaying ? t('gifcard.playing') : t('gifcard.play')}</span>
-                  </button>
-                </>
-              ) : null}
-            </div>
+          {audioSrc && (
+            <button onClick={toggleAudio}
+              className="flex items-center gap-2 bg-white/10 backdrop-blur rounded-full px-3 py-1.5 w-fit">
+              {needsTap
+                ? <VolumeX className="w-3.5 h-3.5 text-white animate-pulse" />
+                : audioPlaying
+                ? <Pause className="w-3.5 h-3.5 text-white" />
+                : <Play className="w-3.5 h-3.5 text-white fill-white" />}
+              <Music className={`w-3.5 h-3.5 text-white ${audioPlaying ? 'animate-spin' : ''}`} style={{ animationDuration: '3s' }} />
+              <span className="text-white text-xs max-w-[160px] truncate">
+                {needsTap ? t('gifcard.tapForSound') : musicTitle || (audioPlaying ? t('gifcard.playing') : t('gifcard.play'))}
+              </span>
+            </button>
           )}
         </div>
 
