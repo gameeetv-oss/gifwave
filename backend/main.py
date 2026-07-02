@@ -224,7 +224,7 @@ def _ytdlp_audio_info(url: str):
         "format": "bestaudio[ext=m4a]/bestaudio/best",
         "quiet": True,
         "no_warnings": True,
-        "extractor_args": {"youtube": {"player_client": ["android"]}},
+        "extractor_args": {"youtube": {"player_client": ["android", "web", "tv"]}},
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
@@ -237,9 +237,8 @@ def _ytdlp_audio_info(url: str):
         return info.get("url", ""), {}, "m4a", title
 
 
-@app.post("/music/extract")
-async def extract_music(url: str = Query(...)):
-    """YouTube sesini yt-dlp ile indirip Supabase storage'a yükle."""
+async def _extract_and_store(url: str):
+    """YouTube sesini yt-dlp ile indirip Supabase music bucket'a yükle → (public_url, title)."""
     if not SUPABASE_SERVICE_KEY:
         raise HTTPException(status_code=500, detail="SUPABASE_SERVICE_ROLE_KEY eksik")
 
@@ -285,8 +284,34 @@ async def extract_music(url: str = Query(...)):
     if res.status_code not in (200, 201):
         raise HTTPException(status_code=500, detail=f"Storage hatası: {res.text[:100]}")
 
-    public_url = f"{SUPABASE_URL}/storage/v1/object/public/music/{filename}"
+    return f"{SUPABASE_URL}/storage/v1/object/public/music/{filename}", title
+
+
+@app.post("/music/extract")
+async def extract_music(url: str = Query(...)):
+    """YouTube sesini yt-dlp ile indirip Supabase storage'a yükle."""
+    public_url, title = await _extract_and_store(url)
     return {"url": public_url, "title": title}
+
+
+@app.post("/admin/migrate-music")
+async def migrate_music(admin_key: str = Query(...)):
+    """YouTube linki music_url olan postları kalıcı Supabase ses dosyasına taşı."""
+    if admin_key != ADMIN_KEY:
+        raise HTTPException(403, "Yetkisiz")
+    rows = await _sb_select("posts")
+    results = []
+    for row in rows:
+        murl = (row.get("music_url") or "").strip()
+        if not murl or not _extract_youtube_id(murl):
+            continue
+        try:
+            public_url, title = await _extract_and_store(murl)
+            await _sb_update("posts", {"id": row["id"]}, {"music_url": public_url})
+            results.append({"post": row["id"], "status": "ok", "title": title})
+        except HTTPException as e:
+            results.append({"post": row["id"], "status": "fail", "detail": str(e.detail)[:120]})
+    return {"migrated": results}
 
 
 # ── Premium sistemi ───────────────────────────────────────────────────────
