@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
+import { notifyPush } from '../lib/push'
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
 
@@ -69,6 +70,7 @@ export default function RemixModal({ post, onClose }) {
       if (error) throw error
       if (post.user_id !== user.id) {
         supabase.from('notifications').insert({ user_id: post.user_id, type: 'repost', from_user_id: user.id, post_id: post.id })
+        notifyPush('remix', post.user_id, post.id)
       }
       toast.success(t('remix.shared'))
       onClose()

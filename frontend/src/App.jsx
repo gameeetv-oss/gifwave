@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { supabase } from './lib/supabase'
+import { initPush, logoutPush } from './lib/push'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { PresenceProvider } from './context/PresenceContext'
 import { BlockProvider } from './context/BlockContext'
@@ -70,6 +71,15 @@ function BackendWarmup() {
   return null
 }
 
+function PushSetup() {
+  const { user } = useAuth()
+  useEffect(() => {
+    if (user?.id) initPush(user.id)
+    else logoutPush()
+  }, [user?.id])
+  return null
+}
+
 function DeepLinkHandler() {
   const navigate = useNavigate()
   useEffect(() => {
@@ -107,6 +117,7 @@ export default function App() {
       <PresenceProvider>
         <BlockProvider>
           <BackendWarmup />
+          <PushSetup />
           <DeepLinkHandler />
           <AppRoutes />
         </BlockProvider>

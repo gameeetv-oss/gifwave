@@ -11,6 +11,7 @@ import ReportModal from './ReportModal'
 import RemixModal from './RemixModal'
 import { playGlobalAudio, stopGlobalAudio, getCurrentUrl, isPlaying } from '../lib/globalAudio'
 import { useTranslation } from 'react-i18next'
+import { notifyPush } from '../lib/push'
 
 const BACKEND = import.meta.env.VITE_BACKEND_URL || 'https://gifwave-backend.onrender.com'
 
@@ -142,6 +143,7 @@ export default function GIFCard({ post, onDelete }) {
       if (error) { setLiked(false); setLikeCount(n => n - 1); return }
       if (post.user_id !== user.id) {
         supabase.from('notifications').insert({ user_id: post.user_id, type: 'like', from_user_id: user.id, post_id: post.id })
+        notifyPush('like', post.user_id, post.id)
       }
     } else {
       await supabase.from('likes').delete().eq('user_id', user.id).eq('post_id', post.id)
@@ -158,6 +160,7 @@ export default function GIFCard({ post, onDelete }) {
       if (error) { setReposted(false); setRepostCount(n => Math.max(0, n - 1)); return }
       if (post.user_id !== user.id) {
         supabase.from('notifications').insert({ user_id: post.user_id, type: 'repost', from_user_id: user.id, post_id: post.id })
+        notifyPush('repost', post.user_id, post.id)
       }
       toast.success(t('gifcard.reposted'))
     } else {

@@ -7,6 +7,7 @@ import { usePresence } from '../context/PresenceContext'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
+import { notifyPush } from '../lib/push'
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
 
@@ -201,6 +202,7 @@ export default function CommentModal({ post, onClose }) {
         supabase.from('notifications').insert({
           user_id: post.user_id, type: 'comment', from_user_id: user.id, post_id: post.id
         })
+        notifyPush('comment', post.user_id, post.id)
       }
       setText('')
       await loadComments()

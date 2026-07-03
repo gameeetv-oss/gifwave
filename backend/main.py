@@ -457,6 +457,83 @@ class GenerateCodesRequest(BaseModel):
 
 ADMIN_KEY = os.getenv("ADMIN_KEY", "gifwave-admin-2024")
 
+# ── Push Bildirimleri (OneSignal) ─────────────────────────────────────────
+
+ONESIGNAL_APP_ID = os.getenv("ONESIGNAL_APP_ID", "")
+ONESIGNAL_API_KEY = os.getenv("ONESIGNAL_API_KEY", "")
+
+PUSH_TEXTS = {
+    "like":    {"tr": "❤️ {from_name} gönderini beğendi",       "en": "❤️ {from_name} liked your post"},
+    "comment": {"tr": "💬 {from_name} gönderine yorum yaptı",   "en": "💬 {from_name} commented on your post"},
+    "follow":  {"tr": "👤 {from_name} seni takip etmeye başladı", "en": "👤 {from_name} started following you"},
+    "repost":  {"tr": "🔁 {from_name} gönderini yeniden paylaştı", "en": "🔁 {from_name} reposted your post"},
+    "remix":   {"tr": "🎵 {from_name} GIF'ini remixledi",        "en": "🎵 {from_name} remixed your GIF"},
+    "message": {"tr": "✉️ {from_name} sana mesaj gönderdi",      "en": "✉️ {from_name} sent you a message"},
+}
+
+
+async def _send_push(to_user_id: str, notif_type: str, from_name: str, post_id: str = None):
+    """OneSignal ile push gönder — alias: Supabase user id (external_id)."""
+    if not ONESIGNAL_APP_ID or not ONESIGNAL_API_KEY:
+        return {"skipped": "onesignal_not_configured"}
+    texts = PUSH_TEXTS.get(notif_type)
+    if not texts:
+        return {"skipped": "unknown_type"}
+    payload = {
+        "app_id": ONESIGNAL_APP_ID,
+        "include_aliases": {"external_id": [to_user_id]},
+        "target_channel": "push",
+        "headings": {"en": "GifWave"},
+        "contents": {
+            "en": texts["en"].format(from_name=from_name),
+            "tr": texts["tr"].format(from_name=from_name),
+        },
+        "data": {"type": notif_type, "post_id": post_id},
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.post(
+                "https://api.onesignal.com/notifications",
+                headers={"Authorization": f"Key {ONESIGNAL_API_KEY}", "Content-Type": "application/json"},
+                json=payload,
+            )
+        return {"status": r.status_code}
+    except Exception as e:
+        return {"error": str(e)[:80]}
+
+
+class NotifyRequest(BaseModel):
+    to_user_id: str
+    type: str
+    post_id: str | None = None
+
+
+@app.post("/notify")
+async def send_notification(req: NotifyRequest, request: Request):
+    """Frontend'den bildirim tetikleme — gönderen kullanıcının JWT'si doğrulanır."""
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        raise HTTPException(401, "Unauthorized")
+    user_token = auth.split(" ", 1)[1]
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(
+            f"{SUPABASE_URL}/auth/v1/user",
+            headers={"Authorization": f"Bearer {user_token}", "apikey": SUPABASE_SERVICE_KEY},
+        )
+        if r.status_code != 200:
+            raise HTTPException(401, "Invalid token")
+        sender_id = r.json().get("id")
+
+    if not sender_id or sender_id == req.to_user_id:
+        return {"skipped": True}
+
+    rows = await _sb_select("profiles", {"id": sender_id})
+    from_name = (rows[0].get("display_name") or rows[0].get("username") or "Birisi") if rows else "Birisi"
+
+    result = await _send_push(req.to_user_id, req.type, from_name, req.post_id)
+    return {"ok": True, "push": result}
+
 
 @app.post("/premium/activate")
 async def premium_activate(req: ActivateCodeRequest):

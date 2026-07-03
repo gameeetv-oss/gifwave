@@ -7,6 +7,7 @@ import { useBlock } from '../context/BlockContext'
 import { Send, Loader2, ArrowLeft, Eye, EyeOff, BadgeCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
+import { notifyPush } from '../lib/push'
 
 function Ticks({ msg, isPartnerOnline, partnerAllowsReceipts }) {
   const isRead = msg.read && partnerAllowsReceipts !== false
@@ -157,6 +158,9 @@ export default function Messages() {
         supabase.from('notifications').insert({
           user_id: activeConv.profile.id, type: 'dm', from_user_id: user.id
         })
+      }
+      if (data) {
+        notifyPush('message', activeConv.profile.id)
       }
     } else toast.error(t('messages.messageFailed'))
     setSending(false)

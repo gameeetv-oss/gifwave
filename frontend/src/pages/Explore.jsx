@@ -6,6 +6,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import GIFCard from '../components/GIFCard'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
+import { notifyPush } from '../lib/push'
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
 
@@ -303,6 +304,7 @@ export default function Explore() {
       if (!error) {
         setFollowStatuses(s => ({ ...s, [targetId]: 'accepted' }))
         supabase.from('notifications').insert({ user_id: targetId, type: 'follow', from_user_id: user.id })
+        notifyPush('follow', targetId)
       }
     }
   }

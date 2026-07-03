@@ -19,6 +19,7 @@ import { useBlock } from '../context/BlockContext'
 import { usePresence } from '../context/PresenceContext'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
+import { notifyPush } from '../lib/push'
 
 export default function Profile() {
   const { username } = useParams()
@@ -190,6 +191,7 @@ export default function Profile() {
       if (status === 'accepted') {
         setProfile(p => ({ ...p, followers_count: (p.followers_count || 0) + 1 }))
         await supabase.from('notifications').insert({ user_id: profile.id, type: 'follow', from_user_id: user.id })
+        notifyPush('follow', profile.id)
       } else {
         await supabase.from('notifications').insert({ user_id: profile.id, type: 'follow_request', from_user_id: user.id })
         toast(t('profile.followRequestSent'))
