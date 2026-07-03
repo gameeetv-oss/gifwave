@@ -148,7 +148,14 @@
     "musicAddedDesktop": "Music added (plays on desktop)",
     "invalidYoutubeLink": "Invalid YouTube link",
     "invalidUrl": "Invalid URL",
-    "shared": "Shared!"
+    "shared": "Shared!",
+    "trimTitle": "Trim music",
+    "previewTrim": "Preview",
+    "stopPreview": "Stop",
+    "applyTrim": "Trim",
+    "trimming": "Trimming...",
+    "trimmed": "Music trimmed ✂️",
+    "trimError": "Trim failed"
   },
   "profile": {
     "follow": "Follow",
@@ -464,5 +471,40 @@
     "backToCollections": "Back to Collections",
     "deleteCollection": "Delete Collection",
     "deleteConfirm": "Do you want to delete this collection?"
+  },
+  "interests": {
+    "title": "Pick your interests",
+    "subtitle": "Let's personalize your feed",
+    "comedy": "Comedy",
+    "animals": "Animals",
+    "sports": "Sports",
+    "gaming": "Gaming",
+    "music": "Music",
+    "movies": "Movies & TV",
+    "nature": "Nature & Travel",
+    "food": "Food",
+    "cars": "Cars",
+    "fashion": "Fashion",
+    "art": "Art",
+    "tech": "Tech",
+    "save": "Continue ({{count}} selected)",
+    "pickAtLeastOne": "Pick at least 1 category",
+    "skip": "Skip for now"
+  },
+  "badges": {
+    "streak": "{{count}} day streak",
+    "creator10": "10+ GIFs",
+    "creator50": "50+ GIFs",
+    "loved": "Loved",
+    "star": "Star",
+    "popular": "Popular"
+  },
+  "remix": {
+    "title": "Make a remix 🎵",
+    "menuLabel": "Remix with music",
+    "desc": "You'll share @{{username}}'s GIF with your own music",
+    "pickMusic": "Pick a music first",
+    "publish": "Share Remix",
+    "shared": "Remix shared! 🎵"
   }
 }

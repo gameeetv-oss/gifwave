@@ -26,6 +26,25 @@ async function showInterstitialAd() {
 }
 
 const PAGE_SIZE = 10
+const HOT_BATCH = 30
+
+// Keşfet ilk sayfası: etkileşim + tazelik + ilgi alanı skoru (TikTok-vari basit "hot" sıralama)
+function hotSort(posts) {
+  let interests = []
+  try { interests = JSON.parse(localStorage.getItem('gifwave_interests') || '[]') } catch {}
+  const iset = new Set(interests)
+  const now = Date.now()
+  return [...posts].sort((a, b) => {
+    const score = p => {
+      const ageH = Math.max(0, (now - new Date(p.created_at).getTime()) / 3600000)
+      let s = ((p.likes_count || 0) * 3 + (p.comments_count || 0) * 4 + (p.reposts_count || 0) * 3 + 1)
+        / Math.pow(ageH + 2, 1.5)
+      if (iset.size && (p.tags || []).some(t => iset.has(t))) s *= 1.6
+      return s
+    }
+    return score(b) - score(a)
+  })
+}
 
 export default function Feed({ mode = 'all' }) {
   const { user, isPremium } = useAuth()
@@ -66,6 +85,14 @@ export default function Feed({ mode = 'all' }) {
           .order('created_at', { ascending: false }).order('id', { ascending: false })
           .range(pageNum * PAGE_SIZE, (pageNum + 1) * PAGE_SIZE - 1)
         data = postsData || []
+      } else if (pageNum === 0) {
+        // İlk sayfa: son HOT_BATCH postu çek, hot score ile sırala
+        const { data: postsData } = await supabase
+          .from('posts')
+          .select('*, profiles!fk_posts_profiles(username, display_name, avatar_url, is_verified, show_online_status, is_premium, premium_until)')
+          .order('created_at', { ascending: false }).order('id', { ascending: false })
+          .range(0, HOT_BATCH - 1)
+        data = hotSort(postsData || [])
       } else {
         const { data: postsData } = await supabase
           .from('posts')
@@ -86,11 +113,14 @@ export default function Feed({ mode = 'all' }) {
         data = data.map(p => ({ ...p, user_liked: likedIds.has(p.id), user_reposted: repostedIds.has(p.id) }))
       }
 
+      const fetchedCount = data.length
       if (allBlockedIds.size > 0) data = data.filter(p => !allBlockedIds.has(p.user_id))
 
       setPosts(prev => reset ? data : [...prev, ...data])
-      setHasMore(data.length === PAGE_SIZE)
-      if (data.length === PAGE_SIZE) pageRef.current = pageNum + 1
+      const isHotPage = mode !== 'following' && pageNum === 0
+      const fullPage = isHotPage ? HOT_BATCH : PAGE_SIZE
+      setHasMore(fetchedCount === fullPage)
+      if (fetchedCount === fullPage) pageRef.current = isHotPage ? HOT_BATCH / PAGE_SIZE : pageNum + 1
     } catch (err) {
       // silent fail — feed pagination errors don't need user-facing error
     } finally {

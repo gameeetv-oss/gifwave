@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { X, Upload, Search, Video, Loader2, Check, Music, Trash2, Camera, Image, Type } from 'lucide-react'
+import { X, Upload, Search, Video, Loader2, Check, Music, Trash2, Camera, Image, Type, Scissors, Play, Pause } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
@@ -88,6 +88,16 @@ export default function UploadModal({ onClose, onSuccess }) {
   const [musicUploading, setMusicUploading] = useState(false)
   const [ytInput, setYtInput] = useState('')
   const musicFileRef = useRef()
+
+  // Müzik kırpma
+  const trimAudioRef = useRef(null)
+  const trimTimerRef = useRef(null)
+  const [musicDuration, setMusicDuration] = useState(0)
+  const [trimStart, setTrimStart] = useState(0)
+  const [trimLen, setTrimLen] = useState(30)
+  const [trimming, setTrimming] = useState(false)
+  const [previewing, setPreviewing] = useState(false)
+  const canTrim = musicUrl.includes('/storage/v1/object/public/music/')
   const [loading, setLoading] = useState(false)
 
   const fileRef = useRef()
@@ -127,6 +137,59 @@ export default function UploadModal({ onClose, onSuccess }) {
     top: t('upload.posTop'),
     center: t('upload.posCenter'),
     bottom: t('upload.posBottom')
+  }
+
+  useEffect(() => {
+    // Müzik değişince kırpma durumunu sıfırla ve süreyi öğren
+    setMusicDuration(0); setTrimStart(0); setPreviewing(false)
+    stopTrimPreview()
+    if (!canTrim) return
+    const a = new Audio(musicUrl)
+    a.preload = 'metadata'
+    a.onloadedmetadata = () => { if (isFinite(a.duration)) setMusicDuration(a.duration) }
+    trimAudioRef.current = a
+    return () => { a.src = ''; trimAudioRef.current = null }
+  }, [musicUrl])
+
+  function stopTrimPreview() {
+    clearTimeout(trimTimerRef.current)
+    if (trimAudioRef.current) trimAudioRef.current.pause()
+    setPreviewing(false)
+  }
+
+  function previewTrim() {
+    const a = trimAudioRef.current
+    if (!a) return
+    if (previewing) { stopTrimPreview(); return }
+    a.currentTime = trimStart
+    a.play().then(() => {
+      setPreviewing(true)
+      trimTimerRef.current = setTimeout(stopTrimPreview, trimLen * 1000)
+    }).catch(() => {})
+  }
+
+  async function applyTrim() {
+    if (!canTrim) return
+    stopTrimPreview()
+    setTrimming(true)
+    try {
+      const res = await fetch(`${BACKEND_URL}/music/trim?url=${encodeURIComponent(musicUrl)}&start=${trimStart.toFixed(1)}&duration=${trimLen}`,
+        { method: 'POST' })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.detail || t('upload.trimError'))
+      }
+      const data = await res.json()
+      setMusicUrl(data.url)
+      toast.success(t('upload.trimmed'))
+    } catch (err) {
+      toast.error(err.message || t('upload.trimError'))
+    } finally { setTrimming(false) }
+  }
+
+  function fmtTime(s) {
+    const m = Math.floor(s / 60), sec = Math.floor(s % 60)
+    return `${m}:${String(sec).padStart(2, '0')}`
   }
 
   function handleFileSelect(e) {
@@ -554,12 +617,48 @@ export default function UploadModal({ onClose, onSuccess }) {
             <input className="input" placeholder={t('upload.tags')} value={tags} onChange={e => setTags(e.target.value)} />
             <input ref={musicFileRef} type="file" accept="audio/*,video/*" className="hidden" onChange={handleMusicSelect} />
             {musicFileName ? (
-              <div className="flex items-center gap-3 bg-[#1a1a2e] border border-brand-500/30 rounded-xl px-3 py-2">
-                <Music className="w-4 h-4 text-brand-400 flex-shrink-0" />
-                <p className="text-sm text-gray-300 flex-1 truncate">{musicFileName}</p>
-                <button onClick={() => { setMusicUrl(''); setMusicFileName('') }} className="text-gray-500 hover:text-red-400 transition-colors">
-                  <Trash2 className="w-4 h-4" />
-                </button>
+              <div className="space-y-2">
+                <div className="flex items-center gap-3 bg-[#1a1a2e] border border-brand-500/30 rounded-xl px-3 py-2">
+                  <Music className="w-4 h-4 text-brand-400 flex-shrink-0" />
+                  <p className="text-sm text-gray-300 flex-1 truncate">{musicFileName}</p>
+                  <button onClick={() => { stopTrimPreview(); setMusicUrl(''); setMusicFileName('') }} className="text-gray-500 hover:text-red-400 transition-colors">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+                {canTrim && musicDuration > 16 && (
+                  <div className="bg-[#12121e] border border-[#2a2a3f] rounded-xl p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Scissors className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                      <span className="text-xs text-gray-400 flex-1">{t('upload.trimTitle')}</span>
+                      {[15, 30].filter(l => musicDuration > l).map(l => (
+                        <button key={l} onClick={() => { setTrimLen(l); if (trimStart > musicDuration - l) setTrimStart(Math.max(0, musicDuration - l)) }}
+                          className={`text-xs px-2 py-0.5 rounded-lg border transition-colors ${trimLen === l ? 'border-brand-500 text-brand-400 bg-brand-500/10' : 'border-gray-600 text-gray-500'}`}>
+                          {l}s
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-500 w-9">{fmtTime(trimStart)}</span>
+                      <input type="range" min={0} max={Math.max(0, musicDuration - trimLen)} step={0.5}
+                        value={trimStart}
+                        onChange={e => { setTrimStart(+e.target.value); stopTrimPreview() }}
+                        className="flex-1 accent-brand-500 h-1" />
+                      <span className="text-xs text-gray-500 w-9 text-right">{fmtTime(Math.min(musicDuration, trimStart + trimLen))}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={previewTrim}
+                        className="flex-1 flex items-center justify-center gap-1.5 text-xs py-1.5 rounded-lg border border-gray-600 text-gray-300 hover:border-brand-500 transition-colors">
+                        {previewing ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                        {previewing ? t('upload.stopPreview') : t('upload.previewTrim')}
+                      </button>
+                      <button type="button" onClick={applyTrim} disabled={trimming}
+                        className="flex-1 flex items-center justify-center gap-1.5 text-xs py-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white transition-colors disabled:opacity-50">
+                        {trimming ? <Loader2 className="w-3 h-3 animate-spin" /> : <Scissors className="w-3 h-3" />}
+                        {trimming ? t('upload.trimming') : t('upload.applyTrim')}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="space-y-2">

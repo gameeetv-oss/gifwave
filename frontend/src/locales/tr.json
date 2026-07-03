@@ -148,7 +148,14 @@
     "musicAddedDesktop": "Müzik eklendi (masaüstünde çalar)",
     "invalidYoutubeLink": "Geçersiz YouTube linki",
     "invalidUrl": "Geçersiz URL",
-    "shared": "Paylaşıldı!"
+    "shared": "Paylaşıldı!",
+    "trimTitle": "Müziği kırp",
+    "previewTrim": "Önizle",
+    "stopPreview": "Durdur",
+    "applyTrim": "Kırp",
+    "trimming": "Kırpılıyor...",
+    "trimmed": "Müzik kırpıldı ✂️",
+    "trimError": "Kırpma başarısız"
   },
   "profile": {
     "follow": "Takip Et",
@@ -464,5 +471,40 @@
     "backToCollections": "Koleksiyonlara Dön",
     "deleteCollection": "Koleksiyonu Sil",
     "deleteConfirm": "Bu koleksiyonu silmek istiyor musun?"
+  },
+  "interests": {
+    "title": "İlgi alanlarını seç",
+    "subtitle": "Akışını sana göre kişiselleştirelim",
+    "comedy": "Komedi",
+    "animals": "Hayvanlar",
+    "sports": "Spor",
+    "gaming": "Oyun",
+    "music": "Müzik",
+    "movies": "Film & Dizi",
+    "nature": "Doğa & Gezi",
+    "food": "Yemek",
+    "cars": "Otomobil",
+    "fashion": "Moda",
+    "art": "Sanat",
+    "tech": "Teknoloji",
+    "save": "Devam et ({{count}} seçili)",
+    "pickAtLeastOne": "En az 1 kategori seç",
+    "skip": "Şimdilik geç"
+  },
+  "badges": {
+    "streak": "{{count}} gün seri",
+    "creator10": "10+ GIF",
+    "creator50": "50+ GIF",
+    "loved": "Sevilen",
+    "star": "Yıldız",
+    "popular": "Popüler"
+  },
+  "remix": {
+    "title": "Remix yap 🎵",
+    "menuLabel": "Müzikle Remix'le",
+    "desc": "@{{username}} kullanıcısının GIF'ini kendi müziğinle paylaşacaksın",
+    "pickMusic": "Önce bir müzik seç",
+    "publish": "Remix'i Paylaş",
+    "shared": "Remix paylaşıldı! 🎵"
   }
 }

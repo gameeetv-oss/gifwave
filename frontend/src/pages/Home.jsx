@@ -1,10 +1,13 @@
 import { useState } from 'react'
 import Feed from '../components/Feed'
+import InterestPicker, { shouldShowInterestPicker } from '../components/InterestPicker'
 import { useTranslation } from 'react-i18next'
 
 export default function Home() {
   const { t } = useTranslation()
   const [tab, setTab] = useState('all')
+  const [showInterests, setShowInterests] = useState(shouldShowInterestPicker)
+  const [feedKey, setFeedKey] = useState(0)
 
   return (
     <div className="h-screen overflow-hidden relative bg-black">
@@ -33,7 +36,14 @@ export default function Home() {
         </div>
       </div>
 
-      <Feed mode={tab} key={tab} />
+      <Feed mode={tab} key={tab + '_' + feedKey} />
+
+      {showInterests && (
+        <InterestPicker onClose={(saved) => {
+          setShowInterests(false)
+          if (saved) setFeedKey(k => k + 1) // ilgi alanlarıyla feed'i yeniden sırala
+        }} />
+      )}
     </div>
   )
 }

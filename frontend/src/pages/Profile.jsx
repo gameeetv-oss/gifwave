@@ -303,6 +303,25 @@ export default function Profile() {
 
   const currentItems = tab === 'posts' ? posts : tab === 'reposts' ? reposts : liked
 
+  // Streak: bugünden (bugün post yoksa dünden) geriye kesintisiz paylaşım günü sayısı
+  const streak = (() => {
+    const days = new Set(posts.map(p => new Date(p.created_at).toDateString()))
+    if (days.size === 0) return 0
+    const d = new Date()
+    if (!days.has(d.toDateString())) d.setDate(d.getDate() - 1)
+    let n = 0
+    while (days.has(d.toDateString())) { n++; d.setDate(d.getDate() - 1) }
+    return n
+  })()
+  const totalLikes = posts.reduce((s, p) => s + (p.likes_count || 0), 0)
+  const badges = []
+  if (streak >= 2) badges.push({ icon: '🔥', label: t('badges.streak', { count: streak }) })
+  if (posts.length >= 10) badges.push({ icon: '⭐', label: t('badges.creator10') })
+  if (posts.length >= 50) badges.push({ icon: '🏆', label: t('badges.creator50') })
+  if (totalLikes >= 25) badges.push({ icon: '❤️', label: t('badges.loved') })
+  if (totalLikes >= 100) badges.push({ icon: '💎', label: t('badges.star') })
+  if ((profile?.followers_count || 0) >= 50) badges.push({ icon: '🚀', label: t('badges.popular') })
+
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-brand-400" /></div>
   if (!profile) return (
     <div className="text-center py-20 text-gray-500"><p className="text-4xl mb-2">😕</p><p>{t('profile.userNotFound')}</p></div>
@@ -521,6 +540,17 @@ export default function Profile() {
                 <p className="text-gray-500">{t('profile.followingLabel')}</p>
               </button>
             </div>
+
+            {badges.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                {badges.map(b => (
+                  <span key={b.label}
+                    className="flex items-center gap-1 bg-[#1a1a2e] border border-[#2a2a3f] rounded-full px-2.5 py-1 text-xs text-gray-300">
+                    <span>{b.icon}</span> {b.label}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

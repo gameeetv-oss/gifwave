@@ -8,6 +8,7 @@ import { usePresence } from '../context/PresenceContext'
 import toast from 'react-hot-toast'
 import CommentModal from './CommentModal'
 import ReportModal from './ReportModal'
+import RemixModal from './RemixModal'
 import { playGlobalAudio, stopGlobalAudio, getCurrentUrl, isPlaying } from '../lib/globalAudio'
 import { useTranslation } from 'react-i18next'
 
@@ -26,6 +27,7 @@ export default function GIFCard({ post, onDelete }) {
   const [showComments, setShowComments] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
   const [showReport, setShowReport] = useState(false)
+  const [showRemix, setShowRemix] = useState(false)
   const [showSaveModal, setShowSaveModal] = useState(false)
   const [collections, setCollections] = useState([])
   const [savedCollectionIds, setSavedCollectionIds] = useState(new Set())
@@ -456,6 +458,12 @@ export default function GIFCard({ post, onDelete }) {
                     </button>
                   </>
                 )}
+                {user && (
+                  <button onClick={() => { setShowMenu(false); setShowRemix(true) }}
+                    className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5">
+                    <Music className="w-4 h-4" /> {t('remix.menuLabel')}
+                  </button>
+                )}
                 <button onClick={() => { share(); setShowMenu(false) }}
                   className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5">
                   <Share2 className="w-4 h-4" /> {t('gifcard.share')}
@@ -511,6 +519,9 @@ export default function GIFCard({ post, onDelete }) {
           reportedUserId={currentPost.user_id}
           onClose={() => setShowReport(false)}
         />
+      )}
+      {showRemix && (
+        <RemixModal post={currentPost} onClose={() => setShowRemix(false)} />
       )}
       {showSaveModal && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-end justify-center" onClick={() => setShowSaveModal(false)}>
