@@ -294,6 +294,65 @@ async def extract_music(url: str = Query(...)):
     return {"url": public_url, "title": title}
 
 
+@app.post("/music/trim")
+async def trim_music(url: str = Query(...), start: float = Query(0, ge=0),
+                     duration: float = Query(30, gt=0, le=120)):
+    """Ses dosyasının belirtilen bölümünü kırpıp Supabase music bucket'a yükle."""
+    if not SUPABASE_SERVICE_KEY:
+        raise HTTPException(status_code=500, detail="SUPABASE_SERVICE_ROLE_KEY eksik")
+    if not url.startswith(SUPABASE_URL):
+        raise HTTPException(status_code=400, detail="Sadece yüklü müzikler kırpılabilir")
+
+    try:
+        async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            audio_data = resp.content
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ses indirilemedi: {str(e)[:80]}")
+
+    if len(audio_data) > 60 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Dosya çok büyük")
+
+    src_ext = url.rsplit(".", 1)[-1].lower()
+    if src_ext not in ("m4a", "mp3", "webm", "ogg", "wav"):
+        src_ext = "m4a"
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        input_path = os.path.join(tmpdir, f"in.{src_ext}")
+        output_path = os.path.join(tmpdir, "out.mp3")
+        with open(input_path, "wb") as f:
+            f.write(audio_data)
+        try:
+            subprocess.run([
+                "ffmpeg", "-y", "-ss", str(start), "-t", str(duration),
+                "-i", input_path, "-vn", "-acodec", "libmp3lame", "-q:a", "4",
+                output_path
+            ], check=True, capture_output=True, timeout=90)
+        except subprocess.CalledProcessError as e:
+            raise HTTPException(status_code=500, detail=f"Kırpma hatası: {e.stderr.decode()[:150]}")
+        except subprocess.TimeoutExpired:
+            raise HTTPException(status_code=500, detail="Zaman aşımı")
+        except FileNotFoundError:
+            raise HTTPException(status_code=500, detail="ffmpeg kurulu değil")
+        if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+            raise HTTPException(status_code=500, detail="Kırpılmış ses üretilemedi")
+        with open(output_path, "rb") as f:
+            trimmed = f.read()
+
+    filename = f"trim_{int(time.time())}_{secrets.token_hex(4)}.mp3"
+    async with httpx.AsyncClient(timeout=60) as client:
+        res = await client.post(
+            f"{SUPABASE_URL}/storage/v1/object/music/{filename}",
+            headers={"Authorization": f"Bearer {SUPABASE_SERVICE_KEY}", "Content-Type": "audio/mpeg"},
+            content=trimmed,
+        )
+    if res.status_code not in (200, 201):
+        raise HTTPException(status_code=500, detail=f"Storage hatası: {res.text[:100]}")
+
+    return {"url": f"{SUPABASE_URL}/storage/v1/object/public/music/{filename}"}
+
+
 @app.post("/admin/set-music")
 async def admin_set_music(post_id: str = Query(...), admin_key: str = Query(...),
                           title: str = Query(""), file: UploadFile = File(...)):
