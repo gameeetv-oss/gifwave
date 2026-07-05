@@ -1,0 +1,19 @@
+name: Keep backend awake
+# Render ücretsiz katmanı 15dk sonra uyur. Her 10dk /health pingle → cold start olmasın.
+# Pi'ye bağımlı değil, bulutta çalışır.
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping health
+        run: |
+          for i in 1 2 3; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" -m 60 https://gifwave-backend.onrender.com/health || echo 000)
+            echo "attempt $i -> $code"
+            [ "$code" = "200" ] && exit 0
+            sleep 15
+          done
