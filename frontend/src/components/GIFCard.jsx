@@ -10,6 +10,7 @@ import CommentModal from './CommentModal'
 import ReportModal from './ReportModal'
 import RemixModal from './RemixModal'
 import { playGlobalAudio, stopGlobalAudio, getCurrentUrl, isPlaying } from '../lib/globalAudio'
+import { translateText } from '../lib/translate'
 import { useTranslation } from 'react-i18next'
 import { notifyPush } from '../lib/push'
 
@@ -196,8 +197,8 @@ export default function GIFCard({ post, onDelete }) {
     setTranslating(true)
     try {
       const target = i18n.language?.split('-')[0] || 'tr'
-      const res = await fetch(`${BACKEND}/translate?text=${encodeURIComponent(caption)}&target=${target}`)
-      const data = await res.json()
+      const data = await translateText(caption, target)
+      if (!data) { toast.error(t('gifcard.translateError')); setTranslating(false); return }
       if (data.same_language) { toast(t('gifcard.alreadyInYourLanguage')); setTranslating(false); return }
       if (data.translated.trim().toLowerCase() === caption.trim().toLowerCase()) {
         toast(t('gifcard.alreadyInYourLanguage')); setTranslating(false); return
@@ -268,18 +269,17 @@ export default function GIFCard({ post, onDelete }) {
   const caption = currentPost.caption || ''
   const isLongCaption = caption.length > 80
 
-  // Otomatik çeviri: post ekrana gelince caption UI dilinden farklıysa çevir
+  // Otomatik çeviri: mount olunca (Feed önden cache'lediği için sonuç anında hazır),
+  // caption UI dilinden farklıysa çeviriyi hemen göster
   const autoTranslateRef = useRef(false)
   useEffect(() => {
-    if (!musicInView || autoTranslateRef.current || !caption.trim() || caption.trim().length < 3) return
+    if (autoTranslateRef.current || !caption.trim() || caption.trim().length < 3) return
     autoTranslateRef.current = true
     ;(async () => {
       try {
         const target = i18n.language?.split('-')[0] || 'tr'
-        const res = await fetch(`${BACKEND}/translate?text=${encodeURIComponent(caption)}&target=${target}`)
-        if (!res.ok) return
-        const data = await res.json()
-        if (data.same_language || !data.translated) return
+        const data = await translateText(caption, target)
+        if (!data || data.same_language || !data.translated) return
         if (data.translated.trim().toLowerCase() === caption.trim().toLowerCase()) return
         setTranslatedCaption(data.translated)
         setSourceLanguage(data.source && data.source !== 'und'
@@ -288,7 +288,7 @@ export default function GIFCard({ post, onDelete }) {
         setShowTranslated(true)
       } catch {}
     })()
-  }, [musicInView])
+  }, [currentPost.id])
 
   return (
     <>

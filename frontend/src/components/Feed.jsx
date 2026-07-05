@@ -9,6 +9,21 @@ import { useAuth } from '../context/AuthContext'
 import { useBlock } from '../context/BlockContext'
 import { useTranslation } from 'react-i18next'
 import { usePullToRefresh } from '../hooks/usePullToRefresh'
+import { prewarmTranslations } from '../lib/translate'
+import { prefetchAudio } from '../lib/globalAudio'
+
+const BACKEND = import.meta.env.VITE_BACKEND_URL || 'https://gifwave-backend.onrender.com'
+
+// Feed yüklenince postların çevirilerini önden ısıt + müziklerini önden çek
+function prewarmFeed(posts, lang) {
+  prewarmTranslations(posts, lang)
+  for (const p of posts) {
+    if (!p?.music_url) continue
+    const isYT = /youtube\.com|youtu\.be/.test(p.music_url)
+    const src = isYT ? `${BACKEND}/music/proxy?url=${encodeURIComponent(p.music_url)}` : p.music_url
+    prefetchAudio(src)
+  }
+}
 
 const AD_EVERY = 5
 const ANDROID_INTERSTITIAL_ID = 'ca-app-pub-4416578432335144/9595174249'
@@ -49,7 +64,7 @@ function hotSort(posts) {
 export default function Feed({ mode = 'all' }) {
   const { user, isPremium } = useAuth()
   const { allBlockedIds } = useBlock()
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const adCounterRef = useRef(0)
   const [posts, setPosts] = useState([])
   const [hasMore, setHasMore] = useState(true)
@@ -115,6 +130,9 @@ export default function Feed({ mode = 'all' }) {
 
       const fetchedCount = data.length
       if (allBlockedIds.size > 0) data = data.filter(p => !allBlockedIds.has(p.user_id))
+
+      // Çeviri + müziği önden ısıt (kullanıcı o posta gelince anında hazır olsun)
+      prewarmFeed(data, i18n?.language || 'tr')
 
       setPosts(prev => reset ? data : [...prev, ...data])
       const isHotPage = mode !== 'following' && pageNum === 0
