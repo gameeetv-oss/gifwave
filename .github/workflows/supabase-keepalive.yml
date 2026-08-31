@@ -1,0 +1,21 @@
+name: Supabase Keep-Alive
+# GifWave Supabase (free tier) 7 gün inaktivitede pause olur.
+# Bu workflow her 6 saatte bir DB'ye hafif bir sorgu atıp uyanık tutar.
+# Pi'den bağımsız, GitHub sunucularında çalışır (2026-08-31 kuruldu).
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST
+        env:
+          ANON: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53ZHdmd29rZHBqZGtwc3p0dXVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NTMzODMsImV4cCI6MjA4ODIyOTM4M30.H9_9Noz8A2kOeP1J2yHP9Vr_06S9T2q0UWdTL3Z1wUo
+        run: |
+          code=$(curl -s -m 25 -o /dev/null -w "%{http_code}" \
+            "https://nwdwfwokdpjdkpsztuuo.supabase.co/rest/v1/posts?select=id&limit=1" \
+            -H "apikey: $ANON" -H "Authorization: Bearer $ANON")
+          echo "Supabase keep-alive -> HTTP $code"
+          [ "$code" = "200" ] || exit 1
