@@ -719,9 +719,23 @@ async def translate_text(text: str = Query(...), target: str = Query("tr")):
                 params={"q": text, "langpair": langpair, "de": "gameeetv@gmail.com"}
             )
             data = resp.json()
-            translated = data["responseData"]["translatedText"]
+            translated = data["responseData"]["translatedText"] or ""
+            status = str(data.get("responseStatus", "200"))
     except Exception as e:
         raise HTTPException(500, f"Çeviri hatası: {str(e)[:80]}")
+
+    # MyMemory kota dolunca / hata verince translatedText içine UYARI metni koyuyor
+    # ("MYMEMORY WARNING: YOU USED ALL AVAILABLE FREE TRANSLATIONS..."). Bunu caption
+    # olarak GÖSTERME — sessizce orijinali döndür ve CACHE'LEME (kota resetlenince tekrar denesin).
+    _tup = translated.upper()
+    if (
+        status not in ("200",)
+        or "MYMEMORY WARNING" in _tup
+        or "USED ALL AVAILABLE" in _tup
+        or "INVALID LANGUAGE PAIR" in _tup
+        or not translated.strip()
+    ):
+        return {"translated": text, "source": source, "same_language": True}
 
     lang_tr, lang_en = LANG_NAMES.get(source, (source, source))
     result = {
