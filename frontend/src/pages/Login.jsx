@@ -10,10 +10,12 @@ export default function Login() {
   const { t } = useTranslation()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [agreedTerms, setAgreedTerms] = useState(false)
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e) {
     e.preventDefault()
+    if (!agreedTerms) { toast.error(t('auth.mustAgreeTerms')); return }
     setLoading(true)
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) {
@@ -46,7 +48,18 @@ export default function Login() {
               <label className="text-sm text-gray-400 mb-1.5 block">{t('auth.password')}</label>
               <input className="input" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required />
             </div>
-            <button type="submit" disabled={loading} className="btn-primary w-full py-3 mt-2">
+            <label className="flex items-start gap-2 mt-2 cursor-pointer select-none">
+              <input type="checkbox" checked={agreedTerms} onChange={e => setAgreedTerms(e.target.checked)}
+                className="mt-0.5 w-4 h-4 accent-brand-500 flex-shrink-0" />
+              <span className="text-xs text-gray-400 leading-snug">
+                {t('auth.eulaAgree')}{' '}
+                <Link to="/terms" className="text-brand-400">{t('auth.terms')}</Link>{' '}
+                {t('auth.and')}{' '}
+                <Link to="/privacy" className="text-brand-400">{t('auth.privacy')}</Link>{'. '}
+                {t('auth.eulaNoTolerance')}
+              </span>
+            </label>
+            <button type="submit" disabled={loading || !agreedTerms} className="btn-primary w-full py-3 mt-2 disabled:opacity-50">
               {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : t('auth.loginBtn')}
             </button>
           </form>

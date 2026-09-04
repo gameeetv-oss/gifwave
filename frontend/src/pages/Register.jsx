@@ -12,10 +12,12 @@ export default function Register() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [birthDate, setBirthDate] = useState('')
+  const [agreedTerms, setAgreedTerms] = useState(false)
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e) {
     e.preventDefault()
+    if (!agreedTerms) { toast.error(t('auth.mustAgreeTerms')); return }
     if (username.length < 3) { toast.error(t('auth.usernameTooShort')); return }
     if (password.length < 6) { toast.error(t('auth.passwordTooShort')); return }
 
@@ -96,17 +98,21 @@ export default function Register() {
                 onChange={e => setBirthDate(e.target.value)} required />
               <p className="text-xs text-gray-600 mt-1">{t('auth.ageWarning')}</p>
             </div>
-            <button type="submit" disabled={loading} className="btn-primary w-full py-3 mt-2">
+            <label className="flex items-start gap-2 mt-2 cursor-pointer select-none">
+              <input type="checkbox" checked={agreedTerms} onChange={e => setAgreedTerms(e.target.checked)}
+                className="mt-0.5 w-4 h-4 accent-brand-500 flex-shrink-0" />
+              <span className="text-xs text-gray-400 leading-snug">
+                {t('auth.eulaAgree')}{' '}
+                <Link to="/terms" className="text-brand-400">{t('auth.terms')}</Link>{' '}
+                {t('auth.and')}{' '}
+                <Link to="/privacy" className="text-brand-400">{t('auth.privacy')}</Link>{'. '}
+                {t('auth.eulaNoTolerance')}
+              </span>
+            </label>
+            <button type="submit" disabled={loading || !agreedTerms} className="btn-primary w-full py-3 mt-2 disabled:opacity-50">
               {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : t('auth.registerBtn')}
             </button>
           </form>
-          <p className="text-xs text-gray-600 text-center mt-4">
-            {t('auth.termsAgree')}{' '}
-            <Link to="/terms" className="text-brand-400">{t('auth.terms')}</Link>{' '}
-            {t('auth.and')}{' '}
-            <Link to="/privacy" className="text-brand-400">{t('auth.privacy')}</Link>{' '}
-            {t('auth.accepted')}
-          </p>
         </div>
 
         <p className="text-center text-gray-500 text-sm mt-4">

@@ -13,6 +13,15 @@ export function translateText(text, target) {
 
   const p = fetch(`${BACKEND}/translate?text=${encodeURIComponent(t)}&target=${lang}`)
     .then(r => (r.ok ? r.json() : null))
+    .then(data => {
+      // Güvenlik ağı: backend eski/hatalı ise MyMemory kota uyarısını caption olarak GÖSTERME
+      const tr = (data?.translated || '').toUpperCase()
+      if (tr.includes('MYMEMORY WARNING') || tr.includes('USED ALL AVAILABLE') || tr.includes('INVALID LANGUAGE PAIR')) {
+        _cache.delete(key) // cache'leme ki kota resetlenince tekrar denesin
+        return null
+      }
+      return data
+    })
     .catch(() => null)
   _cache.set(key, p)
   return p
