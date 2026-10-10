@@ -29,3 +29,11 @@
     @apply bg-[#1a1a2e] border border-[#3a3a5c] rounded-xl px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 transition-colors w-full;
   }
 }
+
+/* ── iPhone güvenli alanları (çentik / Dynamic Island ve alt ana ekran çizgisi) ──
+   capacitor.config.json: ios.contentInset = "never" → sayfa ekranın tamamını kaplar,
+   boşlukları burada biz veririz. Tarayıcıda env() 0 olduğu için web görünümü değişmez. */
+.safe-top { padding-top: env(safe-area-inset-top); }
+.safe-top .min-h-screen { min-height: calc(100vh - env(safe-area-inset-top)); }
+.pb-nav { padding-bottom: calc(4rem + env(safe-area-inset-bottom)); }
+.app-nav { height: calc(4rem + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); }

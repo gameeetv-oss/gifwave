@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useInView } from 'react-intersection-observer'
-import { Heart, MessageCircle, Share2, Repeat2, MoreHorizontal, Pencil, Check, X, Loader2, Trash2, BadgeCheck, Play, Pause, Music, ExternalLink, VolumeX, Volume2, Crown, Flag, Languages, Bookmark, Smile } from 'lucide-react'
+import { Heart, MessageCircle, Share2, Repeat2, MoreHorizontal, Pencil, Check, X, Loader2, Trash2, BadgeCheck, Play, Pause, Music, ExternalLink, VolumeX, Volume2, Crown, Flag, Languages, Bookmark, Smile, Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
@@ -10,13 +10,17 @@ import CommentModal from './CommentModal'
 import ReportModal from './ReportModal'
 import RemixModal from './RemixModal'
 import { playGlobalAudio, stopGlobalAudio, getCurrentUrl, isPlaying } from '../lib/globalAudio'
+import { FEATURES } from '../lib/features'
+import { isSoundSaved, toggleSavedSound, useSoundInNewPost } from '../lib/sounds'
 import { translateText } from '../lib/translate'
 import { useTranslation } from 'react-i18next'
 import { notifyPush } from '../lib/push'
 
 const BACKEND = import.meta.env.VITE_BACKEND_URL || 'https://gifwave-backend.onrender.com'
 
-export default function GIFCard({ post, onDelete }) {
+// embedded: Keşfet/Koleksiyon gibi sabit yükseklikli kutuların içinde gösterim
+// (alt menü ve güvenli alan payı gerekmez, düğmeler kutuya sığar).
+export default function GIFCard({ post, onDelete, embedded = false }) {
   const { user, profile: myProfile } = useAuth()
   const { onlineUsers } = usePresence()
   const { t, i18n } = useTranslation()
@@ -63,9 +67,20 @@ export default function GIFCard({ post, onDelete }) {
   // üzerinden, diğerleri direkt URL ile HTML5 Audio (globalAudio) çalar.
   const { ref: musicRef, inView: musicInView } = useInView({ threshold: 0.6 })
   const ytMusicId = currentPost.music_url ? getYouTubeId(currentPost.music_url) : null
+  // YouTube linkli eski müzikler sunucudan çalınamıyor (YouTube engelliyor): özellik kapalıyken gösterme
   const audioSrc = currentPost.music_url
-    ? (ytMusicId ? `${BACKEND}/music/proxy?url=${encodeURIComponent(currentPost.music_url)}` : currentPost.music_url)
+    ? (ytMusicId
+        ? (FEATURES.YOUTUBE_MUSIC ? `${BACKEND}/music/proxy?url=${encodeURIComponent(currentPost.music_url)}` : null)
+        : currentPost.music_url)
     : null
+  // Yeniden kullanılabilir ses: yalnızca kendi depomuzdaki dosyalar
+  const reusableSound = audioSrc && !ytMusicId
+  const [soundSaved, setSoundSaved] = useState(() => !!currentPost.music_url && isSoundSaved(currentPost.music_url, user?.id))
+  const soundInfo = () => ({
+    url: currentPost.music_url,
+    title: t('gifcard.originalSound', { user: post.profiles?.username || '' }),
+    from: post.profiles?.username || '',
+  })
   const [musicTitle, setMusicTitle] = useState(null)
   const [audioPlaying, setAudioPlaying] = useState(false)
   const [needsTap, setNeedsTap] = useState(false)
@@ -76,14 +91,31 @@ export default function GIFCard({ post, onDelete }) {
       .then(r => r.json()).then(d => { if (d.title) setMusicTitle(d.title) }).catch(() => {})
   }, [ytMusicId])
 
+  // Kart ekrandan kalkınca (ör. alttan Profil'e geçince) bu kartın müziği durmalı.
+  // Çalma isteği sürerken sayfa değiştiyse, başladığı anda durdur.
+  const musicMountedRef = useRef(true)
+  const audioSrcRef = useRef(audioSrc)
+  audioSrcRef.current = audioSrc
+  useEffect(() => {
+    musicMountedRef.current = true
+    return () => {
+      musicMountedRef.current = false
+      if (audioSrcRef.current && getCurrentUrl() === audioSrcRef.current) stopGlobalAudio()
+    }
+  }, [])
+
   useEffect(() => {
     if (!audioSrc) return
     if (musicInView) {
       playGlobalAudio(audioSrc).then(() => {
+        if (!musicMountedRef.current) {
+          if (getCurrentUrl() === audioSrc) stopGlobalAudio()
+          return
+        }
         setAudioPlaying(true)
         setNeedsTap(false)
       }).catch(() => {
-        setNeedsTap(true)
+        if (musicMountedRef.current) setNeedsTap(true)
       })
     } else {
       if (getCurrentUrl() === audioSrc) {
@@ -326,7 +358,7 @@ export default function GIFCard({ post, onDelete }) {
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent pointer-events-none" />
 
         {/* Sol alt: kullanıcı + açıklama + müzik */}
-        <div className="absolute left-4 right-20 z-10" style={{ bottom: 'calc(7rem + env(safe-area-inset-bottom))' }}>
+        <div className="absolute left-4 right-20 z-10" style={{ bottom: embedded ? '1rem' : 'calc(7rem + env(safe-area-inset-bottom))' }}>
           <Link to={`/profile/${username}`} className="flex items-center gap-2 mb-3">
             <div className="relative">
               <div className="w-10 h-10 rounded-full overflow-hidden bg-brand-800 ring-2 ring-white/30">
@@ -378,8 +410,9 @@ export default function GIFCard({ post, onDelete }) {
 
           {/* Müzik */}
           {audioSrc && (
+            <div className="flex items-center gap-2">
             <button onClick={toggleAudio}
-              className="flex items-center gap-2 bg-white/10 backdrop-blur rounded-full px-3 py-1.5 w-fit">
+              className="flex items-center gap-2 bg-white/10 backdrop-blur rounded-full px-3 py-1.5 w-fit min-w-0">
               {needsTap
                 ? <VolumeX className="w-3.5 h-3.5 text-white animate-pulse" />
                 : audioPlaying
@@ -390,11 +423,29 @@ export default function GIFCard({ post, onDelete }) {
                 {needsTap ? t('gifcard.tapForSound') : musicTitle || (audioPlaying ? t('gifcard.playing') : t('gifcard.play'))}
               </span>
             </button>
+            {reusableSound && user && (
+              <>
+                <button type="button" aria-label={t('gifcard.saveSound')}
+                  onClick={() => {
+                    const saved = toggleSavedSound(soundInfo(), user?.id)
+                    setSoundSaved(saved)
+                    toast.success(saved ? t('gifcard.soundSaved') : t('gifcard.soundRemoved'))
+                  }}
+                  className="flex items-center justify-center w-8 h-8 rounded-full bg-white/10 backdrop-blur flex-shrink-0">
+                  <Bookmark className={`w-4 h-4 text-white ${soundSaved ? 'fill-white' : ''}`} />
+                </button>
+                <button type="button" onClick={() => useSoundInNewPost(soundInfo())}
+                  className="flex items-center gap-1 h-8 px-3 rounded-full bg-white/10 backdrop-blur text-white text-xs font-semibold flex-shrink-0">
+                  <Plus className="w-3.5 h-3.5" /> {t('gifcard.useSound')}
+                </button>
+              </>
+            )}
+            </div>
           )}
         </div>
 
         {/* Sağ: aksiyon butonları dikey - TikTok stili */}
-        <div className="absolute right-3 flex flex-col items-center gap-5 z-10" style={{ bottom: 'calc(8rem + env(safe-area-inset-bottom))' }}>
+        <div className={`absolute right-3 flex flex-col items-center z-10 ${embedded ? 'gap-2' : 'gap-5'}`} style={{ bottom: embedded ? '1rem' : 'calc(8rem + env(safe-area-inset-bottom))' }}>
           {/* Profil avatar */}
           <Link to={`/profile/${username}`} className="relative mb-2">
             <div className="w-12 h-12 rounded-full overflow-hidden bg-brand-800 ring-2 ring-white">

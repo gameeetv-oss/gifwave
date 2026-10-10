@@ -5,10 +5,12 @@ import { useAuth } from '../context/AuthContext'
 import { usePurchases } from '../hooks/usePurchases'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
 const WHOP_LINK = 'https://whop.com/gifwave/gifwave-premium'
 const PRICE_TRY = '49'
+const APPLE_EULA_URL = 'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/'
 
 export default function Premium({ onClose }) {
   const { user, profile, fetchProfile } = useAuth()
@@ -21,7 +23,17 @@ export default function Premium({ onClose }) {
   const { isNative, offering, initialized, loading: rcLoading, purchasePremium, restorePurchases } = usePurchases(user?.id)
 
   const isPremium = profile?.is_premium && (!profile?.premium_until || new Date(profile.premium_until) > new Date())
-  const price = offering?.availablePackages?.[0]?.product?.priceString || `₺${PRICE_TRY}/ay`
+  const packages = offering?.availablePackages || []
+  const monthlyPkg = packages.find(p => p.packageType === 'MONTHLY' || p.identifier === '$rc_monthly')
+  const annualPkg = packages.find(p => p.packageType === 'ANNUAL' || p.identifier === '$rc_annual')
+  const plans = [
+    monthlyPkg && { pkg: monthlyPkg, label: t('premium.planMonthly'), period: t('premium.perMonth') },
+    annualPkg && { pkg: annualPkg, label: t('premium.planYearly'), period: t('premium.perYear') },
+  ].filter(Boolean)
+  const [planId, setPlanId] = useState(null)
+  const selectedPlan = plans.find(p => p.pkg.identifier === planId) || plans[0] || null
+  // Uygulamada fiyat yalnızca mağazadan gelir; web sürümünde sabit ₺ fiyatı gösterilir
+  const price = (monthlyPkg || packages[0])?.product?.priceString || (isNative ? null : `₺${PRICE_TRY}`)
 
   const BENEFITS = [
     { icon: Upload, text: t('premium.benefits.unlimitedUpload') },
@@ -33,7 +45,7 @@ export default function Premium({ onClose }) {
 
   async function handleNativePurchase() {
     try {
-      const result = await purchasePremium()
+      const result = await purchasePremium(selectedPlan?.pkg)
       if (result) {
         await fetchProfile(user.id)
         toast.success(t('premium.purchaseSuccess'))
@@ -120,7 +132,7 @@ export default function Premium({ onClose }) {
             <Crown className="w-8 h-8 text-yellow-400" />
             <div>
               <h2 className="font-black text-xl text-white">{t('premium.title')}</h2>
-              <p className="text-yellow-400 text-sm font-semibold">{t('premium.monthlyPrice', { price })}</p>
+              {price && <p className="text-yellow-400 text-sm font-semibold">{t('premium.monthlyPrice', { price })}</p>}
             </div>
           </div>
           {isPremium && (
@@ -165,15 +177,39 @@ export default function Premium({ onClose }) {
                     {t('premium.storeUnavailable')}
                   </div>
                 )}
+                {plans.length > 0 && (
+                  <div className="space-y-2">
+                    {plans.map(plan => {
+                      const active = selectedPlan?.pkg.identifier === plan.pkg.identifier
+                      return (
+                        <button key={plan.pkg.identifier} type="button" onClick={() => setPlanId(plan.pkg.identifier)}
+                          className={`w-full flex items-center justify-between rounded-xl border px-4 py-3 text-left transition-colors ${active ? 'border-yellow-400 bg-yellow-500/10' : 'border-[#3a3a5c]'}`}
+                          style={{ touchAction: 'manipulation' }}>
+                          <span>
+                            <span className="block text-sm font-bold text-white">GifWave Premium — {plan.label}</span>
+                            <span className="block text-xs text-gray-400">{t('premium.autoRenewShort')}</span>
+                          </span>
+                          <span className="text-sm font-bold text-yellow-400 whitespace-nowrap">{plan.pkg.product?.priceString}{plan.period}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
                 <button
                   onClick={handleNativePurchase}
-                  disabled={rcLoading || !initialized || !offering}
+                  disabled={rcLoading || !initialized || !selectedPlan}
                   className="btn-primary w-full py-3 flex items-center justify-center gap-2 text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ touchAction: 'manipulation' }}>
                   {rcLoading
                     ? <Loader2 className="w-4 h-4 animate-spin" />
-                    : <><Crown className="w-4 h-4" /> {t('premium.subscribe')} — {price}</>}
+                    : <><Crown className="w-4 h-4" /> {t('premium.subscribe')}{selectedPlan ? ` — ${selectedPlan.pkg.product?.priceString}${selectedPlan.period}` : ''}</>}
                 </button>
+                <p className="text-[11px] leading-relaxed text-gray-500">{t('premium.subscriptionTerms')}</p>
+                <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs">
+                  <a href={APPLE_EULA_URL} target="_blank" rel="noopener noreferrer" className="text-brand-400 underline">{t('premium.termsOfUse')}</a>
+                  <Link to="/privacy" onClick={() => onClose?.()} className="text-brand-400 underline">{t('premium.privacyPolicy')}</Link>
+                  <button type="button" onClick={handleRestore} className="text-brand-400 underline">{t('premium.restore')}</button>
+                </div>
               </div>
 
             ) : (

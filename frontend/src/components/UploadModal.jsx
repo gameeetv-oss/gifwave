@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
+import { FEATURES } from '../lib/features'
+import { getSavedSounds } from '../lib/sounds'
 import { X, Upload, Search, Video, Loader2, Check, Music, Trash2, Camera, Image, Type, Scissors, Play, Pause } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
@@ -77,7 +79,7 @@ function OverlayPreview({ textOverlay, showTextOverlay, textSize, textColor, tex
   )
 }
 
-export default function UploadModal({ onClose, onSuccess }) {
+export default function UploadModal({ onClose, onSuccess, initialSound = null }) {
   const { user, isPremium } = useAuth()
   const { t } = useTranslation()
   const [tab, setTab] = useState('upload')
@@ -88,6 +90,12 @@ export default function UploadModal({ onClose, onSuccess }) {
   const [musicUploading, setMusicUploading] = useState(false)
   const [ytInput, setYtInput] = useState('')
   const musicFileRef = useRef()
+  const musicVideoRef = useRef()
+  const [savedSounds] = useState(() => getSavedSounds(user?.id))
+  // "Bu sesi kullan" ile açıldıysa ses hazır gelsin
+  useEffect(() => {
+    if (initialSound?.url) { setMusicUrl(initialSound.url); setMusicFileName(initialSound.title || '') }
+  }, [initialSound])
 
   // Müzik kırpma
   const trimAudioRef = useRef(null)
@@ -299,8 +307,8 @@ export default function UploadModal({ onClose, onSuccess }) {
         form.append('file', file)
         const res = await fetch(`${BACKEND_URL}/extract-audio`, { method: 'POST', body: form })
         if (!res.ok) {
-          const errData = await res.json().catch(() => ({}))
-          throw new Error(errData.detail || t('upload.musicUploadError'))
+          // Sunucunun ham hata metnini kullanıcıya gösterme
+          throw new Error(t('upload.soundExtractError'))
         }
         const audioBlob = await res.blob()
         uploadFile = audioBlob
@@ -308,15 +316,17 @@ export default function UploadModal({ onClose, onSuccess }) {
         contentType = 'audio/mpeg'
       }
 
-      const path = `${user.id}/${Date.now()}_${uploadName}`
+      const ext = (uploadName.match(/\.([a-z0-9]{2,5})$/i)?.[1] || 'mp3').toLowerCase()
+      const path = `${user.id}/${Date.now()}_sound.${ext}`
       const { error } = await supabase.storage.from('music').upload(path, uploadFile, { contentType })
-      if (error) { toast.error(t('upload.musicUploadError')); return }
+      if (error) { console.error('[music] storage upload error:', error.message || error, { path, contentType, size: uploadFile.size }); toast.error(t('upload.musicUploadError')); return }
       const { data: { publicUrl } } = supabase.storage.from('music').getPublicUrl(path)
       setMusicUrl(publicUrl); setMusicFileName(uploadName)
       toast.success(t('upload.musicUploaded'))
     } catch (err) {
+      console.error('[music] select error:', err?.message || err)
       toast.error(err.message || t('upload.musicUploadError'))
-    } finally { setMusicUploading(false) }
+    } finally { setMusicUploading(false); if (e.target) e.target.value = '' }
   }
 
   async function publish() {
@@ -394,9 +404,9 @@ export default function UploadModal({ onClose, onSuccess }) {
   const tabs = [
     { id: 'upload', label: t('upload.uploadTab'), icon: Upload },
     { id: 'camera', label: t('upload.cameraTab'), icon: Camera },
-    { id: 'giphy', label: t('upload.giphyTab'), icon: Search },
+    FEATURES.GIF_SEARCH && { id: 'giphy', label: t('upload.giphyTab'), icon: Search },
     { id: 'convert', label: t('upload.convertTab'), icon: Video },
-  ]
+  ].filter(Boolean)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
@@ -615,7 +625,8 @@ export default function UploadModal({ onClose, onSuccess }) {
           <div className="space-y-3 pt-2">
             <input className="input" placeholder={t('upload.caption')} value={caption} onChange={e => setCaption(e.target.value)} />
             <input className="input" placeholder={t('upload.tags')} value={tags} onChange={e => setTags(e.target.value)} />
-            <input ref={musicFileRef} type="file" accept="audio/*,video/*" className="hidden" onChange={handleMusicSelect} />
+            <input ref={musicFileRef} type="file" accept="audio/*" className="hidden" onChange={handleMusicSelect} />
+            <input ref={musicVideoRef} type="file" accept="video/*" className="hidden" onChange={handleMusicSelect} />
             {musicFileName ? (
               <div className="space-y-2">
                 <div className="flex items-center gap-3 bg-[#1a1a2e] border border-brand-500/30 rounded-xl px-3 py-2">
@@ -662,6 +673,7 @@ export default function UploadModal({ onClose, onSuccess }) {
               </div>
             ) : (
               <div className="space-y-2">
+                {FEATURES.YOUTUBE_MUSIC && <>
                 <div className="flex gap-2">
                   <input className="input flex-1 text-sm" placeholder={t('upload.ytPlaceholder')}
                     value={ytInput} onChange={e => setYtInput(e.target.value)}
@@ -677,10 +689,32 @@ export default function UploadModal({ onClose, onSuccess }) {
                   <span className="text-xs text-gray-600">{t('upload.orText')}</span>
                   <div className="flex-1 h-px bg-[#2a2a3f]" />
                 </div>
-                <button type="button" onClick={() => musicFileRef.current?.click()} disabled={musicUploading}
-                  className="w-full flex items-center gap-2 px-3 py-2 bg-[#1a1a2e] border border-dashed border-[#3a3a5c] rounded-xl text-sm text-gray-500 hover:border-brand-500 hover:text-brand-400 transition-colors">
-                  <Music className="w-4 h-4" /> {t('upload.uploadFile')}
-                </button>
+                </>}
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => musicVideoRef.current?.click()} disabled={musicUploading}
+                    className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#1a1a2e] border border-dashed border-[#3a3a5c] rounded-xl text-sm text-gray-400 disabled:opacity-50">
+                    {musicUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Video className="w-4 h-4" />} {t('upload.soundFromVideo')}
+                  </button>
+                  <button type="button" onClick={() => musicFileRef.current?.click()} disabled={musicUploading}
+                    className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#1a1a2e] border border-dashed border-[#3a3a5c] rounded-xl text-sm text-gray-400 disabled:opacity-50">
+                    <Music className="w-4 h-4" /> {t('upload.soundFile')}
+                  </button>
+                </div>
+                {musicUploading && <p className="text-xs text-gray-500 text-center">{t('upload.soundProcessing')}</p>}
+                {savedSounds.length > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1.5">{t('upload.savedSounds')}</p>
+                    <div className="flex gap-2 overflow-x-auto pb-1">
+                      {savedSounds.map(snd => (
+                        <button key={snd.url} type="button"
+                          onClick={() => { setMusicUrl(snd.url); setMusicFileName(snd.title || '') }}
+                          className="flex items-center gap-1.5 flex-shrink-0 px-3 py-1.5 rounded-full bg-white/10 text-xs text-gray-200">
+                          <Music className="w-3 h-3" /> <span className="max-w-[150px] truncate">{snd.title || t('upload.savedSound')}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -26,17 +26,41 @@ function prewarmFeed(posts, lang) {
 }
 
 const AD_EVERY = 5
-const ANDROID_INTERSTITIAL_ID = 'ca-app-pub-4416578432335144/9595174249'
+// AdMob geçiş reklamı birimleri (yayıncı pub-1416578432335144)
+const INTERSTITIAL_IDS = {
+  android: 'ca-app-pub-1416578432335144/9595174249',
+  ios: 'ca-app-pub-1416578432335144/3171920753',
+}
+
+let adsReady = null
+// SDK'yı bir kez başlatır. iOS'ta önce Apple'ın takip izni penceresi (ATT) gösterilir;
+// kullanıcı reddederse reklamlar kişiselleştirilmeden gösterilir.
+function initAds() {
+  if (adsReady) return adsReady
+  adsReady = (async () => {
+    const platform = window.Capacitor?.getPlatform?.()
+    if (!INTERSTITIAL_IDS[platform]) return null
+    const adMobModule = await import('@capacitor-community/admob').catch(() => null)
+    if (!adMobModule) return null
+    const { AdMob } = adMobModule
+    if (platform === 'ios') {
+      try {
+        const { status } = await AdMob.trackingAuthorizationStatus()
+        if (status === 'notDetermined') await AdMob.requestTrackingAuthorization()
+      } catch {}
+    }
+    await AdMob.initialize()
+    return { AdMob, adId: INTERSTITIAL_IDS[platform] }
+  })().catch(() => null)
+  return adsReady
+}
 
 async function showInterstitialAd() {
   try {
-    const platform = window.Capacitor?.getPlatform?.()
-    if (platform !== 'android') return
-    const adMobModule = await import(/* @vite-ignore */ '@capacitor-community/admob').catch(() => null)
-    if (!adMobModule) return
-    const { AdMob } = adMobModule
-    await AdMob.prepareInterstitial({ adId: ANDROID_INTERSTITIAL_ID, isTesting: false })
-    await AdMob.showInterstitial()
+    const ads = await initAds()
+    if (!ads) return
+    await ads.AdMob.prepareInterstitial({ adId: ads.adId, isTesting: false })
+    await ads.AdMob.showInterstitial()
   } catch {}
 }
 

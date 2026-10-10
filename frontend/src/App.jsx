@@ -1,29 +1,37 @@
-import { useEffect } from 'react'
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { lazy, Suspense, useEffect } from 'react'
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from './lib/supabase'
 import { initPush, logoutPush } from './lib/push'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { PresenceProvider } from './context/PresenceContext'
 import { BlockProvider } from './context/BlockContext'
 import Navbar from './components/Navbar'
-import Home from './pages/Home'
-import Explore from './pages/Explore'
-import Profile from './pages/Profile'
-import Upload from './pages/Upload'
-import Login from './pages/Login'
-import Register from './pages/Register'
-import ForgotPassword from './pages/ForgotPassword'
-import ResetPassword from './pages/ResetPassword'
-import Notifications from './pages/Notifications'
-import Messages from './pages/Messages'
-import Inbox from './pages/Inbox'
-import PostDetail from './pages/PostDetail'
-import Premium from './pages/Premium'
-import PrivacyPolicy from './pages/PrivacyPolicy'
-import Terms from './pages/Terms'
-import DeleteAccount from './pages/DeleteAccount'
-import ChildSafety from './pages/ChildSafety'
-import Collections from './pages/Collections'
+const Home = lazy(() => import('./pages/Home'))
+const Explore = lazy(() => import('./pages/Explore'))
+const Profile = lazy(() => import('./pages/Profile'))
+const Upload = lazy(() => import('./pages/Upload'))
+const Login = lazy(() => import('./pages/Login'))
+const Register = lazy(() => import('./pages/Register'))
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
+const ResetPassword = lazy(() => import('./pages/ResetPassword'))
+const Notifications = lazy(() => import('./pages/Notifications'))
+const Messages = lazy(() => import('./pages/Messages'))
+const Inbox = lazy(() => import('./pages/Inbox'))
+const PostDetail = lazy(() => import('./pages/PostDetail'))
+const Premium = lazy(() => import('./pages/Premium'))
+const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'))
+const Terms = lazy(() => import('./pages/Terms'))
+const DeleteAccount = lazy(() => import('./pages/DeleteAccount'))
+const ChildSafety = lazy(() => import('./pages/ChildSafety'))
+const Collections = lazy(() => import('./pages/Collections'))
+
+function PageLoader() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#0a0a14]" role="status" aria-label="Loading">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
+    </div>
+  )
+}
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -31,33 +39,41 @@ function PrivateRoute({ children }) {
   return user ? children : <Navigate to="/login" />
 }
 
+// Ana akış ve tek gönderi sayfası tam ekrandır, güvenli alanı kendileri yönetir;
+// diğer tüm sayfalara üstten çentik/Dynamic Island payı verilir.
 function AppRoutes() {
+  const { pathname } = useLocation()
+  const fullScreen = pathname === '/' || pathname.startsWith('/post/')
   return (
     <>
       <Navbar />
-      <Routes>
-        <Route path="/" element={<PrivateRoute><Home /></PrivateRoute>} />
-        <Route path="/explore" element={<div className="pb-16"><Explore /></div>} />
-        <Route path="/upload" element={<PrivateRoute><Upload /></PrivateRoute>} />
-        <Route path="/inbox" element={<PrivateRoute><div className="pb-16"><Inbox /></div></PrivateRoute>} />
-        <Route path="/inbox/:userId" element={<PrivateRoute><div className="pb-16"><Inbox /></div></PrivateRoute>} />
-        <Route path="/messages" element={<Navigate to="/inbox" />} />
-        <Route path="/messages/:userId" element={<PrivateRoute><div className="pb-16"><Messages /></div></PrivateRoute>} />
-        <Route path="/notifications" element={<PrivateRoute><div className="pb-16"><Notifications /></div></PrivateRoute>} />
-        <Route path="/post/:id" element={<PostDetail />} />
-        <Route path="/profile/:username" element={<Profile />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/premium" element={<PrivateRoute><div className="pb-16"><Premium /></div></PrivateRoute>} />
-        <Route path="/privacy" element={<PrivacyPolicy />} />
-        <Route path="/terms" element={<Terms />} />
-        <Route path="/delete-account" element={<DeleteAccount />} />
-        <Route path="/child-safety" element={<ChildSafety />} />
-        <Route path="/collections" element={<PrivateRoute><div className="pb-16"><Collections /></div></PrivateRoute>} />
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
+      <Suspense fallback={<PageLoader />}>
+        <div className={fullScreen ? '' : 'safe-top'}>
+        <Routes>
+          <Route path="/" element={<PrivateRoute><Home /></PrivateRoute>} />
+          <Route path="/explore" element={<div className="pb-nav"><Explore /></div>} />
+          <Route path="/upload" element={<PrivateRoute><Upload /></PrivateRoute>} />
+          <Route path="/inbox" element={<PrivateRoute><div className="pb-nav"><Inbox /></div></PrivateRoute>} />
+          <Route path="/inbox/:userId" element={<PrivateRoute><div className="pb-nav"><Inbox /></div></PrivateRoute>} />
+          <Route path="/messages" element={<Navigate to="/inbox" />} />
+          <Route path="/messages/:userId" element={<PrivateRoute><div className="pb-nav"><Messages /></div></PrivateRoute>} />
+          <Route path="/notifications" element={<PrivateRoute><div className="pb-nav"><Notifications /></div></PrivateRoute>} />
+          <Route path="/post/:id" element={<PostDetail />} />
+          <Route path="/profile/:username" element={<Profile />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/premium" element={<PrivateRoute><div className="pb-nav"><Premium /></div></PrivateRoute>} />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/terms" element={<Terms />} />
+          <Route path="/delete-account" element={<DeleteAccount />} />
+          <Route path="/child-safety" element={<ChildSafety />} />
+          <Route path="/collections" element={<PrivateRoute><div className="pb-nav"><Collections /></div></PrivateRoute>} />
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
+        </div>
+      </Suspense>
     </>
   )
 }

@@ -8,3 +8,6 @@ __pycache__/
 venv/
 *.egg-info/
 .DS_Store
+
+# Demo hesap tohum verisi (şifre içerir) — depoya girmesin
+demo_seed.sql

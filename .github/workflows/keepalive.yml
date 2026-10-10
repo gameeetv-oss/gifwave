@@ -1,9 +1,8 @@
-name: Keep backend awake
-# Render ücretsiz katmanı 15dk sonra uyur. Her 10dk /health pingle → cold start olmasın.
-# Pi'ye bağımlı değil, bulutta çalışır.
+name: Backend health check
+# Periodic health check; do not keep shared Render free instances awake all month.
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    - cron: '17 */6 * * *'
   workflow_dispatch:
 jobs:
   ping:
@@ -17,3 +16,5 @@ jobs:
             [ "$code" = "200" ] && exit 0
             sleep 15
           done
+          echo "Backend health check failed" >&2
+          exit 1

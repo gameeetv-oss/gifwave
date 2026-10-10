@@ -56,6 +56,7 @@
     "forYou": "Explore"
   },
   "explore": {
+    "noResults": "No results found.",
     "placeholder": "Search GIFs, users or #tags...",
     "search": "Search",
     "trending": "Trending GIFs",
@@ -94,6 +95,12 @@
     "trending_tags": "Trending Tags"
   },
   "upload": {
+    "soundExtractError": "Couldn't get sound from this video. It may have no audio.",
+    "soundFromVideo": "Sound from video",
+    "soundFile": "Audio file",
+    "soundProcessing": "Preparing sound, long videos can take a moment…",
+    "savedSounds": "Your saved sounds",
+    "savedSound": "Saved sound",
     "title": "Share",
     "caption": "Write a caption...",
     "tags": "Tags (comma separated: funny, meme, ...)",
@@ -238,6 +245,11 @@
     "edit": "Edit"
   },
   "gifcard": {
+    "originalSound": "Original sound · @{{user}}",
+    "saveSound": "Save sound",
+    "soundSaved": "Sound saved",
+    "soundRemoved": "Sound removed",
+    "useSound": "Use",
     "more": "more",
     "less": "Less",
     "playing": "Playing",
@@ -301,7 +313,15 @@
     "whopTab": "Whop",
     "codeTab": "Activation Code",
     "storeLoading": "Loading store...",
-    "storeUnavailable": "Store is unavailable right now. Please try again later."
+    "storeUnavailable": "Store is unavailable right now. Please try again later.",
+    "planMonthly": "Monthly",
+    "planYearly": "Yearly",
+    "perMonth": "/month",
+    "perYear": "/year",
+    "autoRenewShort": "Auto-renewing subscription",
+    "subscriptionTerms": "GifWave Premium is an auto-renewing subscription. Payment is charged to your Apple ID account at confirmation of purchase. The subscription renews automatically for the same period and price unless it is cancelled at least 24 hours before the end of the current period. You can manage or cancel your subscription in your App Store account settings.",
+    "termsOfUse": "Terms of Use (EULA)",
+    "privacyPolicy": "Privacy Policy"
   },
   "notifications": {
     "title": "Notifications",

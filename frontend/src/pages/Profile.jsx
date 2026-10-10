@@ -94,18 +94,12 @@ export default function Profile() {
 
     if (!prof) { setLoading(false); return }
 
-    const [{ count: realFollowers }, { count: realFollowing }] = await Promise.all([
+    const viewerId = user && user.id !== prof.id ? user.id : null
+    const [{ count: realFollowers }, { count: realFollowing }, postsRes, repostsRes, likedRes, settRes, followRes, blockRes] = await Promise.all([
       supabase.from('follows').select('*', { count: 'exact', head: true })
         .eq('following_id', prof.id),
       supabase.from('follows').select('*', { count: 'exact', head: true })
         .eq('follower_id', prof.id),
-    ])
-    prof.followers_count = realFollowers || 0
-    prof.following_count = realFollowing || 0
-    setProfile(prof)
-    setEditData({ display_name: prof.display_name || '', bio: prof.bio || '', username: prof.username || '', show_online_status: prof.show_online_status !== false })
-
-    const [postsRes, repostsRes, likedRes] = await Promise.all([
       supabase.from('posts')
         .select('*, profiles!fk_posts_profiles(username, display_name, avatar_url, is_verified, is_premium, premium_until)')
         .eq('user_id', prof.id).order('created_at', { ascending: false }),
@@ -115,7 +109,18 @@ export default function Profile() {
       supabase.from('likes')
         .select('post_id, created_at, posts(*, profiles!fk_posts_profiles(username, display_name, avatar_url, is_verified, is_premium, premium_until))')
         .eq('user_id', prof.id).order('created_at', { ascending: false }),
+      supabase.from('user_settings').select('*').eq('user_id', prof.id).maybeSingle(),
+      viewerId
+        ? supabase.from('follows').select('status').eq('follower_id', viewerId).eq('following_id', prof.id).maybeSingle()
+        : Promise.resolve({ data: null }),
+      viewerId
+        ? supabase.from('blocks').select('blocker_id').eq('blocker_id', viewerId).eq('blocked_id', prof.id).maybeSingle()
+        : Promise.resolve({ data: null }),
     ])
+    prof.followers_count = realFollowers || 0
+    prof.following_count = realFollowing || 0
+    setProfile(prof)
+    setEditData({ display_name: prof.display_name || '', bio: prof.bio || '', username: prof.username || '', show_online_status: prof.show_online_status !== false })
 
     const rawPosts = postsRes.data || []
     if (user && rawPosts.length > 0) {
@@ -137,36 +142,22 @@ export default function Profile() {
     setLiked((likedRes.data || []).map(l => ({ ...l.posts, _liked: true, user_liked: true }))
       .filter(p => p?.id && !allBlockedIds.has(p.user_id)))
 
-    if (user && !isMe) {
-      const [followRes, blockRes] = await Promise.all([
-        supabase.from('follows').select('status')
-          .eq('follower_id', user.id).eq('following_id', prof.id).maybeSingle(),
-        supabase.from('blocks').select('blocker_id')
-          .eq('blocker_id', user.id).eq('blocked_id', prof.id).maybeSingle(),
-      ])
+    if (viewerId) {
       setFollowStatus(followRes.data?.status || null)
       setIsBlocked(!!blockRes.data)
     }
 
-    const { data: settData } = await supabase.from('user_settings').select('*').eq('user_id', prof.id).maybeSingle()
+    const settData = settRes.data
     const defaultSett = { is_private: false, who_can_comment: 'all', who_can_reply: 'all', show_liked_posts: true, allow_dm: true, show_read_receipts: true }
     const finalSett = settData || defaultSett
     setSettings(finalSett)
-    if (isMe) setEditSettings(finalSett)
+    if (user?.id === prof.id) setEditSettings(finalSett)
 
-    const viewerIsMe = user?.id === prof.id
-    if (!viewerIsMe && finalSett.is_private) {
-      let isFollower = false
-      if (user) {
-        const { data: fData } = await supabase.from('follows')
-          .select('status').eq('follower_id', user.id).eq('following_id', prof.id).maybeSingle()
-        isFollower = fData?.status === 'accepted'
-      }
-      if (!isFollower) {
-        setPosts([])
-        setReposts([])
-        setLiked([])
-      }
+    // Gizli hesap: takipçi olmayan ziyaretçi gönderileri göremez
+    if (user?.id !== prof.id && finalSett.is_private && followRes.data?.status !== 'accepted') {
+      setPosts([])
+      setReposts([])
+      setLiked([])
     }
 
     setLoading(false)
@@ -393,8 +384,8 @@ export default function Profile() {
           </div>
 
           <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0 flex-1 basis-40">
                 {editMode ? (
                   <div className="space-y-2">
                     <input className="input text-sm" placeholder={t('profile.displayNamePlaceholder')}

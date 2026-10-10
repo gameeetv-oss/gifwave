@@ -7,11 +7,14 @@ import GIFCard from '../components/GIFCard'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
 import { notifyPush } from '../lib/push'
+import { useBlock } from '../context/BlockContext'
+import { FEATURES } from '../lib/features'
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
 
 export default function Explore() {
   const { user } = useAuth()
+  const { allBlockedIds } = useBlock() || {}
   const { t } = useTranslation()
   const [searchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('tag') ? '#' + searchParams.get('tag') : '')
@@ -20,6 +23,7 @@ export default function Explore() {
   const [trendingPosts, setTrendingPosts] = useState([])
   const [trendingTags, setTrendingTags] = useState([])
   const [searchResults, setSearchResults] = useState([])
+  const [searchPosts, setSearchPosts] = useState([])
   const [giphyResults, setGiphyResults] = useState([])
   const [loading, setLoading] = useState(false)
   const [giphyLoading, setGiphyLoading] = useState(false)
@@ -140,6 +144,7 @@ export default function Explore() {
     setSearchGifCursors([''])
     setSearchGifNext('')
     lastSearchQuery.current = trimmed
+    setSearchPosts([])
 
     if (trimmed.startsWith('#')) {
       const tag = trimmed.slice(1)
@@ -150,8 +155,15 @@ export default function Explore() {
         .order('created_at', { ascending: false })
       setSearchResults(data || [])
     } else {
-      const { data } = await supabase.from('profiles').select('*').ilike('username', `%${trimmed}%`).limit(20)
+      const safe = trimmed.replace(/[%_,()]/g, ' ').trim()
+      const [{ data }, { data: postData }] = await Promise.all([
+        supabase.from('profiles').select('*').or(`username.ilike.%${safe}%,display_name.ilike.%${safe}%`).limit(20),
+        supabase.from('posts')
+          .select('*, profiles!fk_posts_profiles(username, display_name, avatar_url, is_verified, is_premium, premium_until)')
+          .ilike('caption', `%${safe}%`).order('created_at', { ascending: false }).limit(20),
+      ])
       setSearchResults(data || [])
+      setSearchPosts((postData || []).filter(p => !allBlockedIds?.has(p.user_id)))
       if (user && data?.length > 0) {
         const ids = data.map(u => u.id).filter(id => id !== user.id)
         if (ids.length > 0) {
@@ -165,6 +177,7 @@ export default function Explore() {
     }
     setLoading(false)
 
+    if (!FEATURES.GIF_SEARCH) { setGiphyResults([]); setGiphyLoading(false); return }
     const gifQ = trimmed.replace(/^#/, '')
     fetch(`${BACKEND_URL}/giphy/search?q=${encodeURIComponent(gifQ)}&limit=20`)
       .then(r => r.json())
@@ -393,6 +406,7 @@ export default function Explore() {
               </div>
             ) : (
               <div className="space-y-2">
+                {FEATURES.YOUTUBE_MUSIC && <>
                 <div className="flex gap-2">
                   <input
                     className="input flex-1 text-sm"
@@ -413,6 +427,7 @@ export default function Explore() {
                   <span className="text-xs text-gray-600">{t('explore.orText')}</span>
                   <div className="flex-1 h-px bg-[#2a2a3f]" />
                 </div>
+                </>}
                 <button type="button" onClick={() => editMusicFileRef.current?.click()} disabled={editMusicUploading}
                   className="w-full flex items-center gap-2 px-3 py-2 bg-[#12121e] border border-dashed border-[#3a3a5c] rounded-xl text-sm text-gray-500 hover:border-brand-500 hover:text-brand-400 transition-colors">
                   <Music className="w-4 h-4" />
@@ -531,12 +546,29 @@ export default function Explore() {
                 <div className="space-y-4">
                   {searchResults.map(post => (
                     <div key={post.id} className="relative h-[480px] rounded-2xl overflow-hidden">
-                      <GIFCard post={post} />
+                      <GIFCard post={post} embedded />
                     </div>
                   ))}
                 </div>
               )}
             </div>
+          )}
+
+          {!loading && isUserSearch && searchPosts.length > 0 && (
+            <div>
+              <h2 className="font-semibold text-gray-300 mb-3">{t('explore.platformPosts')}</h2>
+              <div className="space-y-4">
+                {searchPosts.map(post => (
+                  <div key={post.id} className="relative h-[480px] rounded-2xl overflow-hidden">
+                    <GIFCard post={post} embedded />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!loading && !giphyLoading && searchResults.length === 0 && searchPosts.length === 0 && giphyResults.length === 0 && (
+            <p className="text-center text-gray-500 py-10">{t('explore.noResults')}</p>
           )}
         </div>
       )}
@@ -576,7 +608,7 @@ export default function Explore() {
                   <div className="space-y-4">
                     {trendingPosts.map(post => (
                       <div key={post.id} className="relative h-[480px] rounded-2xl overflow-hidden">
-                        <GIFCard post={post} />
+                        <GIFCard post={post} embedded />
                       </div>
                     ))}
                   </div>

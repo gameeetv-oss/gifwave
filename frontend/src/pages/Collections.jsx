@@ -128,7 +128,7 @@ export default function Collections() {
           <div className="space-y-4">
             {collectionPosts.map(post => (
               <div key={post.id} className="relative h-[500px] rounded-2xl overflow-hidden">
-                <GIFCard post={post} />
+                <GIFCard post={post} embedded />
               </div>
             ))}
           </div>

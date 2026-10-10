@@ -49,7 +49,16 @@ export default defineConfig({
   server: { port: 3000 },
   build: {
     rollupOptions: {
-      external: ['@capacitor-community/admob', '@revenuecat/purchases-capacitor'],
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+          if (id.includes('@supabase')) return 'supabase'
+          if (id.includes('react-router')) return 'router'
+          if (id.includes('i18next')) return 'i18n'
+          if (id.includes('lucide-react')) return 'icons'
+          if (id.includes('/react/') || id.includes('/react-dom/')) return 'react'
+        },
+      },
     },
   },
 })

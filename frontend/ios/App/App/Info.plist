@@ -32,19 +32,51 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>20</string>
+	<string>26</string>
 	<key>GADApplicationIdentifier</key>
-	<string>ca-app-pub-4416578432335144~6450136156</string>
+	<string>ca-app-pub-1416578432335144~3175790181</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>GifWave uses the camera to record GIFs for your profile.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>GifWave does not need your location. If you allow it, advertising partners may use your approximate location to show more relevant ads.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>GifWave uses the microphone when you record a video with the camera.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>GifWave saves GIFs to your photo library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>GifWave accesses your photo library to upload GIFs.</string>
+	<key>NSUserTrackingUsageDescription</key>
+	<string>This lets GifWave show you more relevant ads. You can use the app normally if you decline.</string>
+	<key>SKAdNetworkItems</key>
+	<array>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>cstr6suwn9.skadnetwork</string>
+		</dict>
+	</array>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneConfigurationName</key>
+					<string>Default Configuration</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

@@ -18,7 +18,12 @@ export function usePurchases(userId) {
   const [initialized, setInitialized] = useState(false)
 
   useEffect(() => {
-    if (!isNative() || !RC_API_KEY || !userId) return
+    setOffering(null)
+    setInitialized(false)
+    if (!isNative() || !RC_API_KEY || !userId) {
+      setInitialized(true)
+      return
+    }
     let cancelled = false
 
     async function init() {
@@ -37,18 +42,18 @@ export function usePurchases(userId) {
     return () => { cancelled = true }
   }, [userId])
 
-  async function purchasePremium() {
+  async function purchasePremium(selectedPackage) {
     if (!isNative() || !initialized) return null
     setLoading(true)
     try {
       const { Purchases } = await import('@revenuecat/purchases-capacitor')
-      const pkg = offering?.availablePackages?.[0]
+      const pkg = selectedPackage || offering?.availablePackages?.[0]
       if (!pkg) throw new Error('Paket bulunamadı')
       const { customerInfo } = await Purchases.purchasePackage({ aPackage: pkg })
       const active = customerInfo.entitlements.active[ENTITLEMENT_ID]
       return active ? customerInfo : null
     } catch (e) {
-      if (e.code !== 'PURCHASE_CANCELLED') throw e
+      if (!e.userCancelled && e.code !== 'PURCHASE_CANCELLED' && String(e.code) !== '1') throw e
       return null
     } finally {
       setLoading(false)
@@ -62,8 +67,7 @@ export function usePurchases(userId) {
       const { customerInfo } = await Purchases.restorePurchases()
       return customerInfo.entitlements.active[ENTITLEMENT_ID] ? customerInfo : null
     } catch (e) {
-      console.error('[RC] restore error:', e)
-      return null
+      throw e
     }
   }
 

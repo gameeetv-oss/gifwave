@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 const AuthContext = createContext({})
@@ -8,30 +8,61 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
 
+  const activeUser = useRef(null)
+  const mounted = useRef(false)
+  const profileRequest = useRef(0)
+
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      if (session?.user) fetchProfile(session.user.id)
-      else setLoading(false)
-    })
-
+    mounted.current = true
+    let disposed = false
+    let authChanged = false
+    const applySession = (session) => {
+      if (disposed) return
+      const nextUser = session?.user ?? null
+      activeUser.current = nextUser?.id ?? null
+      setUser(nextUser)
+      setProfile(null)
+      setLoading(false)
+      if (nextUser) {
+        // Leave the auth callback before querying Supabase again.
+        setTimeout(() => {
+          if (!disposed && activeUser.current === nextUser.id) fetchProfile(nextUser.id).catch(() => {})
+        }, 0)
+      }
+    }
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
-      if (session?.user) fetchProfile(session.user.id)
-      else { setProfile(null); setLoading(false) }
+      authChanged = true
+      applySession(session)
     })
-
-    return () => subscription.unsubscribe()
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (disposed || authChanged) return
+      if (error) throw error
+      applySession(data.session)
+    }).catch(() => {
+      if (!disposed && !authChanged) setLoading(false)
+    })
+    return () => {
+      disposed = true
+      mounted.current = false
+      subscription.unsubscribe()
+    }
   }, [])
 
   async function fetchProfile(userId) {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
-    setProfile(data)
-    setLoading(false)
+    const request = ++profileRequest.current
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single()
+      if (error) return
+      if (mounted.current && activeUser.current === userId && request === profileRequest.current) {
+        setProfile(data)
+      }
+    } finally {
+      if (mounted.current && activeUser.current === userId) setLoading(false)
+    }
   }
 
   async function signOut() {

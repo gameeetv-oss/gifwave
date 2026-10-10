@@ -129,17 +129,15 @@ async def convert_video_to_gif(file: UploadFile = File(...)):
             f.write(content)
 
         try:
+            # Tek geçiş: palet üretimi ve uygulaması aynı komutta (video bir kez çözülür,
+            # ücretsiz sunucuda iki geçişe göre belirgin hızlı).
             subprocess.run([
                 "ffmpeg", "-y", "-t", "8", "-i", input_path,
-                "-vf", "fps=10,scale=320:-1:flags=lanczos,palettegen=max_colors=64",
-                palette_path
-            ], check=True, capture_output=True, timeout=60)
-
-            subprocess.run([
-                "ffmpeg", "-y", "-t", "8", "-i", input_path, "-i", palette_path,
-                "-lavfi", "fps=10,scale=320:-1:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer",
+                "-filter_complex",
+                "fps=10,scale=320:-1:flags=bilinear,split[a][b];"
+                "[a]palettegen=max_colors=64[p];[b][p]paletteuse=dither=bayer",
                 output_path
-            ], check=True, capture_output=True, timeout=60)
+            ], check=True, capture_output=True, timeout=90)
         except subprocess.CalledProcessError as e:
             raise HTTPException(status_code=500, detail=f"Dönüştürme hatası: {e.stderr.decode()[:200]}")
         except subprocess.TimeoutExpired:

@@ -56,6 +56,7 @@
     "forYou": "Keşfet"
   },
   "explore": {
+    "noResults": "Sonuç bulunamadı.",
     "placeholder": "GIF ara, kullanıcı veya #tag...",
     "search": "Ara",
     "trending": "Trending GIF'ler",
@@ -94,6 +95,12 @@
     "trending_tags": "Trend Etiketler"
   },
   "upload": {
+    "soundExtractError": "Bu videodan ses alınamadı. Videoda ses olmayabilir.",
+    "soundFromVideo": "Videodan ses al",
+    "soundFile": "Ses dosyası",
+    "soundProcessing": "Ses hazırlanıyor, video uzunsa biraz sürebilir…",
+    "savedSounds": "Kaydettiğin sesler",
+    "savedSound": "Kayıtlı ses",
     "title": "Paylaş",
     "caption": "Açıklama yaz...",
     "tags": "Tag'ler (virgülle ayır: komedi, meme, ...)",
@@ -238,6 +245,11 @@
     "edit": "Düzenle"
   },
   "gifcard": {
+    "originalSound": "Orijinal ses · @{{user}}",
+    "saveSound": "Sesi kaydet",
+    "soundSaved": "Ses kaydedildi",
+    "soundRemoved": "Ses kayıtlardan çıkarıldı",
+    "useSound": "Kullan",
     "more": "devamı",
     "less": "Daha az",
     "playing": "Çalıyor",
@@ -301,7 +313,15 @@
     "whopTab": "Whop",
     "codeTab": "Aktivasyon Kodu",
     "storeLoading": "Mağaza yükleniyor...",
-    "storeUnavailable": "Şu anda mağazaya bağlanılamıyor. Lütfen birazdan tekrar dene."
+    "storeUnavailable": "Şu anda mağazaya bağlanılamıyor. Lütfen birazdan tekrar dene.",
+    "planMonthly": "Aylık",
+    "planYearly": "Yıllık",
+    "perMonth": "/ay",
+    "perYear": "/yıl",
+    "autoRenewShort": "Otomatik yenilenen abonelik",
+    "subscriptionTerms": "GifWave Premium otomatik yenilenen bir aboneliktir. Ödeme, satın alma onaylandığında Apple Kimliği hesabınızdan alınır. Abonelik, mevcut dönemin bitiminden en az 24 saat önce iptal edilmezse aynı süre ve fiyatla kendiliğinden yenilenir. Aboneliğinizi App Store hesap ayarlarından yönetebilir veya iptal edebilirsiniz.",
+    "termsOfUse": "Kullanım Koşulları (EULA)",
+    "privacyPolicy": "Gizlilik Politikası"
   },
   "notifications": {
     "title": "Bildirimler",

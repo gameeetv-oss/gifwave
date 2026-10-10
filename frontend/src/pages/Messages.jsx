@@ -174,7 +174,7 @@ export default function Messages() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6">
-      <div className="card overflow-hidden flex" style={{ height: 'calc(100vh - 120px)' }}
+      <div className="card overflow-hidden flex" style={{ height: 'calc(100vh - 120px - env(safe-area-inset-top) - env(safe-area-inset-bottom))' }}
         onClick={() => setShowReceiptsMenu(false)}>
 
         {/* Sol: Konuşmalar */}

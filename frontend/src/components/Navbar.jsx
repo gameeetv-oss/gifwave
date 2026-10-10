@@ -1,11 +1,12 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { Home, Compass, Plus, User, MessageSquare, Crown } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { lazy, Suspense, useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabase'
-import UploadModal from './UploadModal'
-import Premium from '../pages/Premium'
+import { syncSavedSounds } from '../lib/sounds'
+const UploadModal = lazy(() => import('./UploadModal'))
+const Premium = lazy(() => import('../pages/Premium'))
 
 export default function Navbar() {
   const { user, profile, signOut, isPremium } = useAuth()
@@ -15,6 +16,14 @@ export default function Navbar() {
   const [unread, setUnread] = useState(0)
   const [unreadDMs, setUnreadDMs] = useState(0)
   const [showUpload, setShowUpload] = useState(false)
+  const [initialSound, setInitialSound] = useState(null)
+  useEffect(() => {
+    const onUseSound = e => { setInitialSound(e.detail || null); setShowUpload(true) }
+    window.addEventListener('gifwave-use-sound', onUseSound)
+    return () => window.removeEventListener('gifwave-use-sound', onUseSound)
+  }, [])
+  // Giriş yapınca hesaptaki kayıtlı sesleri indir
+  useEffect(() => { if (user?.id) syncSavedSounds(user.id) }, [user?.id])
   const [showPremium, setShowPremium] = useState(false)
 
   const myProfileLink = profile?.username
@@ -45,7 +54,7 @@ export default function Navbar() {
 
   if (!user) {
     return (
-      <nav className="fixed bottom-0 inset-x-0 z-50 bg-[#0a0a14]/95 backdrop-blur border-t border-[#2a2a3f] h-16 flex items-center justify-around px-4">
+      <nav className="fixed bottom-0 inset-x-0 z-50 bg-[#0a0a14]/95 backdrop-blur border-t border-[#2a2a3f] app-nav flex items-center justify-around px-4">
         <Link to="/login" className="btn-ghost text-sm">{t('auth.login')}</Link>
         <Link to="/register" className="btn-primary text-sm">{t('auth.register')}</Link>
       </nav>
@@ -54,7 +63,7 @@ export default function Navbar() {
 
   return (
     <>
-      <nav className="fixed bottom-0 inset-x-0 z-50 bg-[#0a0a14]/95 backdrop-blur border-t border-[#2a2a3f] h-16 flex items-center justify-around px-2">
+      <nav className="fixed bottom-0 inset-x-0 z-50 bg-[#0a0a14]/95 backdrop-blur border-t border-[#2a2a3f] app-nav flex items-center justify-around px-2">
         <Link to="/" className={`flex flex-col items-center gap-0.5 px-4 py-2 rounded-xl transition-all ${isActive('/') ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}>
           <Home className="w-6 h-6" />
           <span className="text-[10px]">{t('nav.home')}</span>
@@ -94,8 +103,10 @@ export default function Navbar() {
         </Link>
       </nav>
 
-      {showUpload && <UploadModal onClose={() => setShowUpload(false)} onSuccess={() => navigate('/')} />}
-      {showPremium && <Premium onClose={() => setShowPremium(false)} />}
+      <Suspense fallback={null}>
+        {showUpload && <UploadModal initialSound={initialSound} onClose={() => { setShowUpload(false); setInitialSound(null) }} onSuccess={() => navigate('/')} />}
+        {showPremium && <Premium onClose={() => setShowPremium(false)} />}
+      </Suspense>
     </>
   )
 }

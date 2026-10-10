@@ -9,7 +9,7 @@ export default function Inbox() {
   const [tab, setTab] = useState('messages')
 
   return (
-    <div className="flex flex-col" style={{ minHeight: 'calc(100vh - 64px)' }}>
+    <div className="flex flex-col" style={{ minHeight: 'calc(100vh - 64px - env(safe-area-inset-top) - env(safe-area-inset-bottom))' }}>
       {/* Tab başlık */}
       <div className="sticky top-0 z-10 bg-[#0a0a14]/95 backdrop-blur border-b border-[#2a2a3f] flex">
         <button
